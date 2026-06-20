@@ -1877,9 +1877,9 @@ export function generateCode(nodes: Node[]): string {
 /* ────────────────────────────────────────────────────────────────────────── *
  * High-level decompile entry point
  * ────────────────────────────────────────────────────────────────────────── */
-export type SupportedGame = "TGE10" | "Tribes2" | "ForgettableDungeon";
+export type SupportedGame = "TGE10" | "TGE14" | "TCON" | "Tribes2" | "ForgettableDungeon" | "BlocklandV1" | "BlocklandV20" | "BlocklandV21";
 
-const SUPPORTED_DECOMPILE = new Set<SupportedGame>(["TGE10", "Tribes2", "ForgettableDungeon"]);
+const SUPPORTED_DECOMPILE = new Set<SupportedGame>(["TGE10", "TGE14", "TCON", "Tribes2", "ForgettableDungeon", "BlocklandV1", "BlocklandV20", "BlocklandV21"]);
 
 export function isDecompileSupported(game: string): game is SupportedGame {
   return SUPPORTED_DECOMPILE.has(game as SupportedGame);
