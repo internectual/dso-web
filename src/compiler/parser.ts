@@ -30,21 +30,10 @@ export class Parser {
     return stmts;
   }
 
-  private decl(stmts: AST.Stmt[]): AST.Stmt | null {
-    // Check for package — parse all functions inside and push them directly
+  private decl(): AST.Stmt | null {
+    // Check for package
     if (this.match(TokenType.Package)) {
-      const name = this.consume(TokenType.Label, 'Expected package name');
-      this.consume(TokenType.LBracket, "Expected '{' after package name");
-      while (this.check(TokenType.Function)) {
-        const fn = this.functionDecl();
-        if (fn) {
-          fn.packageName = name;
-          stmts.push(fn);
-        }
-      }
-      this.consume(TokenType.RBracket, "Expected '}' after package body");
-      this.consume(TokenType.Semicolon, "Expected ';' after package block");
-      return null;
+      return this.packageDecl();
     }
     // Check for function
     const fn = this.functionDecl();
@@ -388,6 +377,19 @@ export class Parser {
       return expr;
     }
 
+    // Check for array element assignment: SlotAccessExpr with null slotName (array access)
+    if (expr instanceof AST.SlotAccessExpr && expr.slotName === null && expr.arrayExpr !== null) {
+      if (this.match(TokenType.Assign)) {
+        const rexpr = this.expression();
+        return new AST.SlotAssignExpr(expr.objectExpr, expr.arrayExpr, null, rexpr);
+      }
+      if (this.check(TokenType.PlusPlus) || this.check(TokenType.MinusMinus)) {
+        const op = this.advance();
+        return new AST.ParenthesisExpr(new AST.SlotAssignOpExpr(expr.objectExpr, expr.arrayExpr, null, null, op));
+      }
+      return expr;
+    }
+
     // Check for function call (label followed by parenthesized args)
     if (expr instanceof AST.ConstantExpr) {
       if (this.match(TokenType.LParen)) {
@@ -562,56 +564,18 @@ export class Parser {
     let expr = this.primary();
     if (!expr) return new AST.StringConstExpr(0, '', false);
 
-    // Handle namespace::name calls
-    if (expr instanceof AST.ConstantExpr && this.check(TokenType.DoubleColon)) {
-      this.advance(); // consume ::
-      const name = this.consume(TokenType.Label, 'Expected name after ::');
-      // Check for function call
-      if (this.check(TokenType.LParen)) {
-        this.advance(); // consume (
-        const args: AST.Expr[] = [];
-        if (!this.check(TokenType.RParen)) {
-          args.push(this.expression());
-          while (this.match(TokenType.Comma)) {
-            args.push(this.expression());
-          }
-        }
-        this.consume(TokenType.RParen, "Expected ')' after arguments");
-        expr = new AST.FuncCallExpr(name, expr.name, args, FuncCallType.MethodCall);
-      } else {
-        // Just a namespace-qualified name
-        expr = new AST.ConstantExpr(name);
-      }
-      return expr;
-    }
-
     // Handle function calls: label(...)
     if (expr instanceof AST.ConstantExpr && this.check(TokenType.LParen)) {
       this.advance(); // consume (
-      // Handle namespace::name() calls
-      if (this.check(TokenType.DoubleColon)) {
-        this.advance(); // consume ::
-        const name = this.consume(TokenType.Label, 'Expected function name after ::');
-        const args2: AST.Expr[] = [];
-        if (!this.check(TokenType.RParen)) {
-          args2.push(this.expression());
-          while (this.match(TokenType.Comma)) {
-            args2.push(this.expression());
-          }
-        }
-        this.consume(TokenType.RParen, "Expected ')' after arguments");
-        expr = new AST.FuncCallExpr(name, expr.name, args2, FuncCallType.MethodCall);
-      } else {
-        const args: AST.Expr[] = [];
-        if (!this.check(TokenType.RParen)) {
+      const args: AST.Expr[] = [];
+      if (!this.check(TokenType.RParen)) {
+        args.push(this.expression());
+        while (this.match(TokenType.Comma)) {
           args.push(this.expression());
-          while (this.match(TokenType.Comma)) {
-            args.push(this.expression());
-          }
         }
-        this.consume(TokenType.RParen, "Expected ')' after arguments");
-        expr = new AST.FuncCallExpr(expr.name, null, args, FuncCallType.FunctionCall);
       }
+      this.consume(TokenType.RParen, "Expected ')' after arguments");
+      expr = new AST.FuncCallExpr(expr.name, null, args, FuncCallType.FunctionCall);
     }
 
     // Handle slot access chains
@@ -632,6 +596,44 @@ export class Parser {
       const index = this.expression();
       this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
       expr = new AST.SlotAccessExpr(expr, index, null);
+    }
+
+    // Handle namespace::name calls
+    if (expr instanceof AST.ConstantExpr && this.check(TokenType.DoubleColon)) {
+      this.advance();
+      const name = this.consume(TokenType.Label, 'Expected name after ::');
+      if (this.check(TokenType.LParen)) {
+        this.advance();
+        const args: AST.Expr[] = [];
+        if (!this.check(TokenType.RParen)) {
+          args.push(this.expression());
+          while (this.match(TokenType.Comma)) {
+            args.push(this.expression());
+          }
+        }
+        this.consume(TokenType.RParen, "Expected ')' after arguments");
+        expr = new AST.FuncCallExpr(name, expr.name, args, FuncCallType.MethodCall);
+      } else {
+        expr = new AST.ConstantExpr(name);
+      }
+      return expr;
+    }
+
+    // Handle method calls on objects: expr.field(args)
+    if (expr instanceof AST.SlotAccessExpr && expr.slotName !== null && this.check(TokenType.LParen)) {
+      this.advance();
+      const args: AST.Expr[] = [];
+      if (!this.check(TokenType.RParen)) {
+        args.push(this.expression());
+        while (this.match(TokenType.Comma)) {
+          args.push(this.expression());
+        }
+      }
+      this.consume(TokenType.RParen, "Expected ')' after arguments");
+      expr = new AST.FuncCallExpr(expr.slotName, null, args, FuncCallType.MethodCall);
+      // Store the object for potential use
+      (expr as any).objectExpr = { name: expr.name, namespace: null };
+      return expr;
     }
 
     return expr;

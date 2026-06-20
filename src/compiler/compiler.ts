@@ -446,9 +446,17 @@ export class Compiler {
     if (e.arrayExpr) { this.compileExpr(c, e.arrayExpr, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.AdvanceStr)); }
     this.compileExpr(c, e.objectExpr, TypeReq.String);
     this.emit(c, this.getOpcodeValue(OpCode.SetCurObject));
-    this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
-    const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName.literal, fIp);
-    if (e.arrayExpr) { this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr)); this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray)); }
+    if (e.slotName) {
+      // Field access: obj.field
+      this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
+      const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName.literal, fIp);
+      if (e.arrayExpr) { this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr)); this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray)); }
+    } else if (e.arrayExpr) {
+      // Array access: expr[expr]
+      this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
+      const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, '', fIp);
+      this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray));
+    }
     if (t === TypeReq.Int) this.emit(c, this.getOpcodeValue(OpCode.LoadFieldUInt));
     else if (t === TypeReq.Float) this.emit(c, this.getOpcodeValue(OpCode.LoadFieldFlt));
     else this.emit(c, this.getOpcodeValue(OpCode.LoadFieldStr));
@@ -457,14 +465,23 @@ export class Compiler {
   private compileSlotAssign(c: CompileContext, e: AST.SlotAssignExpr, t: TypeReq): void {
     this.compileExpr(c, e.expr, TypeReq.String);
     this.emit(c, this.getOpcodeValue(OpCode.AdvanceStr));
-    if (e.arrayExpr) { this.compileExpr(c, e.arrayExpr, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.AdvanceStr)); }
     if (e.objectExpr) { this.compileExpr(c, e.objectExpr, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.SetCurObject)); }
     else this.emit(c, this.getOpcodeValue(OpCode.SetCurObjectNew));
-    this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
-    const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName.literal, fIp);
-    if (e.arrayExpr) { this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr)); this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray)); }
-    this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr));
-    this.emit(c, this.getOpcodeValue(OpCode.SaveFieldStr));
+    if (e.slotName) {
+      // Field assignment: obj.field = value
+      if (e.arrayExpr) { this.compileExpr(c, e.arrayExpr, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.AdvanceStr)); }
+      this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
+      const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName.literal, fIp);
+      if (e.arrayExpr) { this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr)); this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray)); }
+      this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr));
+      this.emit(c, this.getOpcodeValue(OpCode.SaveFieldStr));
+    } else if (e.arrayExpr) {
+      // Array element assignment: expr[expr] = value
+      // The array index is already compiled as part of the SlotAccessExpr
+      // We just need to set the field array and save
+      this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray));
+      this.emit(c, this.getOpcodeValue(OpCode.SaveFieldStr));
+    }
     if (t !== TypeReq.String) this.emit(c, this.getOpcodeValue(this.conversionOp(TypeReq.String, t)));
   }
 

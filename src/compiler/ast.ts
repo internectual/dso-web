@@ -203,10 +203,11 @@ export class SlotAccessExpr extends Expr {
 export class SlotAssignExpr extends Expr {
   objectExpr: Expr | null;
   arrayExpr: Expr | null;
-  slotName: Token;
+  slotName: Token | null;
   expr: Expr;
-  constructor(objectExpr: Expr | null, arrayExpr: Expr | null, slotName: Token, expr: Expr) {
-    super(slotName.line); this.objectExpr = objectExpr; this.arrayExpr = arrayExpr; this.slotName = slotName; this.expr = expr;
+  constructor(objectExpr: Expr | null, arrayExpr: Expr | null, slotName: Token | null, expr: Expr) {
+    super(slotName ? slotName.line : (objectExpr ? objectExpr.lineNo : 0));
+    this.objectExpr = objectExpr; this.arrayExpr = arrayExpr; this.slotName = slotName; this.expr = expr;
   }
 }
 

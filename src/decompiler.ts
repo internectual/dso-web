@@ -10,7 +10,7 @@
  * Mirrors dso-sharp's class structure closely to make porting fixes obvious.
  */
 
-import { OPS_MAPS, type OpsMap } from './opcodes';
+import { OPS_MAPS, type OpsMap } from "./opcodes";
 
 /* ────────────────────────────────────────────────────────────────────────── *
  * String escape helper (Util/String.cs)
@@ -252,7 +252,6 @@ export class Ops {
     const add = (v: number, t: OpcodeTag) => { if (!this._tags.has(v)) this._tags.set(v, t); };
     const T = OpcodeTag;
     if (map) {
-      // Build _tags from the provided OpsMap
       for (const [name, value] of Object.entries(map.values)) {
         if (value !== null) {
           const tagValue = (T as any)[name];
@@ -261,7 +260,6 @@ export class Ops {
       }
       this._invalid = map.invalid;
     } else {
-      // Default TGE10 opcodes (backward compatibility)
       add(this.OP_FUNC_DECL, T.OP_FUNC_DECL);
       add(this.OP_CREATE_OBJECT, T.OP_CREATE_OBJECT);
       add(this.OP_ADD_OBJECT, T.OP_ADD_OBJECT);
@@ -345,7 +343,7 @@ export class Ops {
       add(this.OP_UNUSED1, T.OP_UNUSED1);
       add(this.OP_UNUSED2, T.OP_UNUSED2);
       add(this.OP_UNUSED3, T.OP_UNUSED3);
-      this._invalid = 0x53; // TGE10 OP_INVALID
+      this._invalid = 0x53;
     }
   }
 
@@ -1895,15 +1893,14 @@ export interface DecompileResult {
 }
 
 
-// DSO version to OpsMap mapping
 const VERSION_OPS: Record<number, OpsMap> = {
-  33: OPS_MAPS.TGE10,        // TGE10 / TFD
-  174: OPS_MAPS.Tribes2,     // Tribes 2
-  36: OPS_MAPS.TGE14,        // TGE14
-  38: OPS_MAPS.Constructor,  // Constructor
-  90: OPS_MAPS.BlocklandV1,  // Blockland V1
-  190: OPS_MAPS.BlocklandV20, // Blockland V20
-  210: OPS_MAPS.BlocklandV21, // Blockland V21
+  33: OPS_MAPS.TGE10,
+  174: OPS_MAPS.Tribes2,
+  36: OPS_MAPS.TGE14,
+  38: OPS_MAPS.Constructor,
+  90: OPS_MAPS.BlocklandV1,
+  190: OPS_MAPS.BlocklandV20,
+  210: OPS_MAPS.BlocklandV21,
 };
 
 function readDsoVersion(bytes: Uint8Array): number | null {
