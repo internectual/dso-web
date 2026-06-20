@@ -562,18 +562,56 @@ export class Parser {
     let expr = this.primary();
     if (!expr) return new AST.StringConstExpr(0, '', false);
 
+    // Handle namespace::name calls
+    if (expr instanceof AST.ConstantExpr && this.check(TokenType.DoubleColon)) {
+      this.advance(); // consume ::
+      const name = this.consume(TokenType.Label, 'Expected name after ::');
+      // Check for function call
+      if (this.check(TokenType.LParen)) {
+        this.advance(); // consume (
+        const args: AST.Expr[] = [];
+        if (!this.check(TokenType.RParen)) {
+          args.push(this.expression());
+          while (this.match(TokenType.Comma)) {
+            args.push(this.expression());
+          }
+        }
+        this.consume(TokenType.RParen, "Expected ')' after arguments");
+        expr = new AST.FuncCallExpr(name, expr.name, args, FuncCallType.MethodCall);
+      } else {
+        // Just a namespace-qualified name
+        expr = new AST.ConstantExpr(name);
+      }
+      return expr;
+    }
+
     // Handle function calls: label(...)
     if (expr instanceof AST.ConstantExpr && this.check(TokenType.LParen)) {
       this.advance(); // consume (
-      const args: AST.Expr[] = [];
-      if (!this.check(TokenType.RParen)) {
-        args.push(this.expression());
-        while (this.match(TokenType.Comma)) {
-          args.push(this.expression());
+      // Handle namespace::name() calls
+      if (this.check(TokenType.DoubleColon)) {
+        this.advance(); // consume ::
+        const name = this.consume(TokenType.Label, 'Expected function name after ::');
+        const args2: AST.Expr[] = [];
+        if (!this.check(TokenType.RParen)) {
+          args2.push(this.expression());
+          while (this.match(TokenType.Comma)) {
+            args2.push(this.expression());
+          }
         }
+        this.consume(TokenType.RParen, "Expected ')' after arguments");
+        expr = new AST.FuncCallExpr(name, expr.name, args2, FuncCallType.MethodCall);
+      } else {
+        const args: AST.Expr[] = [];
+        if (!this.check(TokenType.RParen)) {
+          args.push(this.expression());
+          while (this.match(TokenType.Comma)) {
+            args.push(this.expression());
+          }
+        }
+        this.consume(TokenType.RParen, "Expected ')' after arguments");
+        expr = new AST.FuncCallExpr(expr.name, null, args, FuncCallType.FunctionCall);
       }
-      this.consume(TokenType.RParen, "Expected ')' after arguments");
-      expr = new AST.FuncCallExpr(expr.name, null, args, FuncCallType.FunctionCall);
     }
 
     // Handle slot access chains
