@@ -479,7 +479,11 @@ export class Compiler {
 
   private compileConstantExpr(c: CompileContext, e: AST.ConstantExpr, t: TypeReq): void {
     if (t === TypeReq.None) return;
-    if (t === TypeReq.String) { const i = this.currentStringTable.add(e.name.literal, false, false); this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent), i); }
+    if (t === TypeReq.String) {
+      const i = this.currentStringTable.add(e.name.literal, false, false);
+      this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
+      const idIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.name.literal, idIp);
+    }
     else { const v = this.stringToNumber(e.name.literal); if (t === TypeReq.Float) { const i = this.addFloat(v); this.emit(c, this.getOpcodeValue(OpCode.LoadImmedFlt), i); } else this.emit(c, this.getOpcodeValue(OpCode.LoadImmedUInt), v | 0); }
   }
 
@@ -590,6 +594,11 @@ export class Compiler {
 
   private compileFuncCall(c: CompileContext, e: AST.FuncCallExpr, t: TypeReq): void {
     this.emit(c, this.getOpcodeValue(OpCode.PushFrame));
+    // For method calls, push the object as the first argument
+    if (e.callType === FuncCallType.MethodCall && e.objectExpr) {
+      this.compileExpr(c, e.objectExpr, TypeReq.String);
+      this.emit(c, this.getOpcodeValue(OpCode.Push));
+    }
     for (const arg of e.args) { this.compileExpr(c, arg, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.Push)); }
     this.emit(c, e.callType === FuncCallType.MethodCall || e.callType === FuncCallType.ParentCall ? this.getOpcodeValue(OpCode.CallFunc) : this.getOpcodeValue(OpCode.CallFuncResolve));
     const nameIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.name.literal, nameIp);

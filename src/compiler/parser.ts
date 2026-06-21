@@ -674,8 +674,7 @@ export class Parser {
         }
       }
       this.consume(TokenType.RParen, "Expected ')' after arguments");
-      expr = new AST.FuncCallExpr(expr.slotName, null, args, FuncCallType.MethodCall);
-      (expr as any).objectExpr = { name: expr.name, namespace: null };
+      expr = new AST.FuncCallExpr(expr.slotName, null, args, FuncCallType.MethodCall, expr.objectExpr);
       return expr;
     }
 

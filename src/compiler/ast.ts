@@ -195,10 +195,11 @@ export class AssignOpExpr extends Expr {
 export class FuncCallExpr extends Expr {
   name: Token;
   namespace: Token | null;
+  objectExpr: Expr | null;
   args: Expr[];
   callType: FuncCallType;
-  constructor(name: Token, namespace: Token | null, args: Expr[], callType: FuncCallType) {
-    super(name.line); this.name = name; this.namespace = namespace; this.args = args; this.callType = callType;
+  constructor(name: Token, namespace: Token | null, args: Expr[], callType: FuncCallType, objectExpr: Expr | null = null) {
+    super(name.line); this.name = name; this.namespace = namespace; this.args = args; this.callType = callType; this.objectExpr = objectExpr;
   }
 }
 
