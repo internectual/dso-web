@@ -177,6 +177,7 @@ function renderHexPreview(bytes: Uint8Array): string {
 export type FileKind =
   | { kind: "dso" }
   | { kind: "image"; mime: string }
+  | { kind: "audio"; mime: string }
   | { kind: "text"; language: string }
   | { kind: "binary" };
 
@@ -187,8 +188,20 @@ const IMAGE_MIME: Record<string, string> = {
   gif: "image/gif",
   webp: "image/webp",
   bmp: "image/bmp",
+  bm8: "image/bmp",
   svg: "image/svg+xml",
   ico: "image/x-icon",
+};
+
+const AUDIO_MIME: Record<string, string> = {
+  wav: "audio/wav",
+  mp3: "audio/mpeg",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  aac: "audio/aac",
+  wma: "audio/x-ms-wma",
+  mid: "audio/midi",
+  midi: "audio/midi",
 };
 
 const TEXT_LANG: Record<string, string> = {
@@ -224,6 +237,7 @@ export function detectFileKind(name: string): FileKind {
   const ext = extOf(name);
   if (ext === "dso") return { kind: "dso" };
   if (IMAGE_MIME[ext]) return { kind: "image", mime: IMAGE_MIME[ext] };
+  if (AUDIO_MIME[ext]) return { kind: "audio", mime: AUDIO_MIME[ext] };
   if (TEXT_LANG[ext]) return { kind: "text", language: TEXT_LANG[ext] };
   return { kind: "binary" };
 }

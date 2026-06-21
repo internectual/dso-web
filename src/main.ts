@@ -1,5 +1,4 @@
 // main.ts — UI entry point for DSO Decompiler
-// Uses the improved decompiler from internectual/dso-sharp
 
 import {
   decompile as decompileDso,
@@ -23,12 +22,13 @@ let lastOutput = "";
 let lastFileName = "";
 let currentResults: DsoFileResult[] = [];
 let selectedIndex = 0;
+let dsoFilter = false;
 
 // ─── DOM refs ───
 const dropZone = document.getElementById("drop-zone")!;
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
 const engineSelect = document.getElementById("engine-select") as HTMLSelectElement;
-const outputEl = document.getElementById("output")!;
+const panelBody = document.getElementById("panel-body")!;
 const statusEl = document.getElementById("status")!;
 const downloadBtn = document.getElementById("download-btn") as HTMLButtonElement;
 const copyBtn = document.getElementById("copy-btn") as HTMLButtonElement;
@@ -36,6 +36,10 @@ const tabsEl = document.getElementById("tabs")!;
 const fileListEl = document.getElementById("file-list")!;
 const layoutEl = document.getElementById("layout")!;
 const versionCardEl = document.getElementById("version-card")!;
+const controlsEl = document.getElementById("controls")!;
+const dsoFilterEl = document.getElementById("dso-filter") as HTMLInputElement;
+const sidebarEl = document.getElementById("sidebar")!;
+const resizeHandle = document.getElementById("resize-handle")!;
 
 // ─── File handling ───
 dropZone.addEventListener("click", () => fileInput.click());
@@ -70,8 +74,7 @@ dropZone.addEventListener("drop", (e) => {
 
 async function handleFile(file: File) {
   statusEl.textContent = "Processing…";
-  outputEl.innerHTML = "";
-  outputEl.classList.remove("error");
+  panelBody.innerHTML = "";
   downloadBtn.disabled = true;
   lastOutput = "";
 
@@ -79,22 +82,47 @@ async function handleFile(file: File) {
     const results = await processUpload(file);
     currentResults = results;
     selectedIndex = 0;
-    layoutEl.style.display = "grid";
+    layoutEl.classList.add("active");
+    controlsEl.style.display = "flex";
     renderFileList();
     renderResult(results[0]);
   } catch (e: any) {
-    outputEl.textContent = `Error: ${e.message || String(e)}`;
-    outputEl.classList.add("error");
+    panelBody.innerHTML = `<div class="code-output"><div class="line-nums"></div><div class="code-content error">Error: ${e.message || String(e)}</div></div>`;
     statusEl.textContent = "Failed";
   }
 }
 
+// ─── DSO filter ───
+dsoFilterEl.addEventListener("change", () => {
+  dsoFilter = dsoFilterEl.checked;
+  renderFileList();
+});
+
+// ─── Resize handle ───
+let isResizing = false;
+resizeHandle.addEventListener("mousedown", (e) => {
+  isResizing = true;
+  e.preventDefault();
+});
+document.addEventListener("mousemove", (e) => {
+  if (!isResizing) return;
+  const newWidth = e.clientX;
+  if (newWidth >= 160 && newWidth <= 500) {
+    sidebarEl.style.width = newWidth + "px";
+  }
+});
+document.addEventListener("mouseup", () => { isResizing = false; });
+
 // ─── Render file list ───
 function renderFileList() {
   fileListEl.innerHTML = "";
+  let visibleIndex = 0;
   currentResults.forEach((r, i) => {
+    const isDso = r.version !== null;
+    if (dsoFilter && !isDso) return;
+
     const div = document.createElement("div");
-    div.className = `file-item ${i === selectedIndex ? "selected" : ""}`;
+    div.className = `file-item ${i === selectedIndex ? "selected" : ""} ${!isDso ? "non-dso" : ""}`;
     div.addEventListener("click", () => {
       selectedIndex = i;
       renderFileList();
@@ -115,48 +143,49 @@ function renderFileList() {
           ? `Ambiguous: ${r.candidates.map((c) => GAME_NAMES[c]).join(" | ")}`
           : r.version !== null
             ? `v${r.version} (unknown)`
-            : "Not a DSO";
+            : "Not a .dso file";
     meta.textContent = `${r.size.toLocaleString()} bytes · ${game}`;
     div.appendChild(meta);
 
     fileListEl.appendChild(div);
+    visibleIndex++;
   });
+
+  if (visibleIndex === 0) {
+    fileListEl.innerHTML = '<div class="empty-state" style="padding:20px;">No .dso files</div>';
+  }
 }
 
 // ─── Render result ───
 function renderResult(result: DsoFileResult) {
   const kind = effectiveFileKind(result.name, result.bytes);
 
-  // Render version card
-  renderVersionCard(result, kind);
+  // Render version card (hide for non-DSO files)
+  if (kind.kind === "dso" && result.version !== null) {
+    renderVersionCard(result);
+  } else {
+    versionCardEl.innerHTML = "";
+  }
 
   // Build tabs
   tabsEl.innerHTML = "";
-  const tabs: { id: string; label: string; text: string; isError?: boolean }[] = [];
+  const tabs: { id: string; label: string }[] = [];
 
   if (kind.kind === "dso") {
-    const decompiled = buildDecompiledOnly(result, result.bytes);
-    tabs.push({
-      id: "decompiled",
-      label: "Decompiled",
-      text: decompiled.text,
-      isError: !decompiled.ok,
-    });
-    const disasm = buildDisassembly(result.bytes);
-    tabs.push({
-      id: "disasm",
-      label: "Disassembly",
-      text: disasm.text,
-      isError: !disasm.ok,
-    });
+    tabs.push({ id: "decompiled", label: "Decompiled" });
+    tabs.push({ id: "disasm", label: "Disassembly" });
   } else if (kind.kind === "text" && result.bytes) {
-    tabs.push({ id: "raw", label: "Content", text: bytesToText(result.bytes) });
+    tabs.push({ id: "raw", label: "Content" });
+  } else if (kind.kind === "image" && result.bytes) {
+    tabs.push({ id: "image", label: "Image" });
+  } else if (kind.kind === "audio" && result.bytes) {
+    tabs.push({ id: "audio", label: "Audio" });
   } else if (kind.kind === "binary" && result.bytes) {
-    tabs.push({ id: "raw", label: "Hex", text: renderHexFull(result.bytes) });
+    tabs.push({ id: "raw", label: "Hex" });
   }
 
   if (tabs.length === 0) {
-    outputEl.innerHTML = '<div class="empty-state">No preview available</div>';
+    panelBody.innerHTML = '<div class="empty-state">No preview available</div>';
     statusEl.textContent = result.error || "Unsupported file";
     return;
   }
@@ -169,15 +198,15 @@ function renderResult(result: DsoFileResult) {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      renderTabContent(tab);
+      renderTabContent(tab.id, result, kind);
     });
     tabsEl.appendChild(btn);
   });
 
-  renderTabContent(tabs[0]);
+  renderTabContent(tabs[0].id, result, kind);
 }
 
-function renderVersionCard(result: DsoFileResult, kind: FileKind) {
+function renderVersionCard(result: DsoFileResult) {
   let gameDisplay = "—";
   if (result.version !== null) {
     if (result.candidates.length === 1) {
@@ -199,28 +228,185 @@ function renderVersionCard(result: DsoFileResult, kind: FileKind) {
   `;
 }
 
-function renderTabContent(tab: { id: string; label: string; text: string; isError?: boolean }) {
-  lastOutput = tab.text;
-  lastFileName = downloadName(currentResults[selectedIndex]?.name || "output");
-  outputEl.textContent = tab.text;
-  outputEl.className = tab.isError ? "error" : "";
-  downloadBtn.disabled = false;
-
-  const result = currentResults[selectedIndex];
-  const kind = effectiveFileKind(result.name, result.bytes);
-  let status = "";
+function renderTabContent(tabId: string, result: DsoFileResult, kind: FileKind) {
   if (kind.kind === "dso") {
-    const decompiled = buildDecompiledOnly(result, result.bytes);
-    const stats = decompiled.ok ? `(${decompiled.text.split("\n").length} lines)` : "";
-    status = tab.isError ? `Decompilation failed ${stats}` : `Decompiled TorqueScript ${stats}`;
-  } else if (kind.kind === "text") {
-    status = `Text file (${tab.text.split("\n").length} lines)`;
-  } else if (kind.kind === "binary") {
-    status = `Binary file (${result.size.toLocaleString()} bytes)`;
-  } else if (kind.kind === "image") {
-    status = "Image file";
+    if (tabId === "decompiled") {
+      const decompiled = buildDecompiledOnly(result, result.bytes);
+      if (decompiled.ok) {
+        renderCodeOutput(decompiled.text, false);
+        statusEl.textContent = `Decompiled TorqueScript (${decompiled.text.split("\n").length} lines)`;
+      } else {
+        renderCodeOutput(decompiled.text, true);
+        statusEl.textContent = "Decompilation failed";
+      }
+      lastOutput = decompiled.text;
+    } else if (tabId === "disasm") {
+      const disasm = buildDisassembly(result.bytes);
+      if (disasm.ok) {
+        renderCodeOutput(disasm.text, false);
+        statusEl.textContent = `Disassembly (${disasm.text.split("\n").length} lines)`;
+      } else {
+        renderCodeOutput(disasm.text, true);
+        statusEl.textContent = "Disassembly failed";
+      }
+      lastOutput = disasm.text;
+    }
+    lastFileName = downloadName(result.name || "output") + (tabId === "disasm" ? ".disasm" : ".cs");
+    downloadBtn.disabled = false;
+  } else if (kind.kind === "text" && result.bytes) {
+    const text = bytesToText(result.bytes);
+    renderCodeOutput(text, false, kind.language);
+    statusEl.textContent = `Text file (${text.split("\n").length} lines)`;
+    lastOutput = text;
+    lastFileName = downloadName(result.name || "output");
+    downloadBtn.disabled = false;
+  } else if (kind.kind === "image" && result.bytes) {
+    renderImageOutput(result.bytes, kind.mime, result.name);
+    statusEl.textContent = `Image file (${result.size.toLocaleString()} bytes)`;
+    lastOutput = "";
+    lastFileName = downloadName(result.name || "image");
+    downloadBtn.disabled = false;
+  } else if (kind.kind === "audio" && result.bytes) {
+    renderAudioOutput(result.bytes, kind.mime, result.name);
+    statusEl.textContent = `Audio file (${result.size.toLocaleString()} bytes)`;
+    lastOutput = "";
+    lastFileName = downloadName(result.name || "audio");
+    downloadBtn.disabled = true;
+  } else if (kind.kind === "binary" && result.bytes) {
+    const hex = renderHexFull(result.bytes);
+    renderCodeOutput(hex, false);
+    statusEl.textContent = `Binary file (${result.size.toLocaleString()} bytes)`;
+    lastOutput = hex;
+    lastFileName = downloadName(result.name || "output") + ".hex";
+    downloadBtn.disabled = false;
   }
-  statusEl.textContent = status;
+}
+
+// ─── Code output with line numbers and syntax highlighting ───
+function renderCodeOutput(text: string, isError: boolean, language?: string) {
+  const lines = text.split("\n");
+  const lineNumsHtml = lines.map((_, i) => `<span>${i + 1}</span>`).join("");
+
+  let contentHtml: string;
+  if (isError) {
+    contentHtml = escapeHtml(text);
+  } else if (language === "cpp" || !language) {
+    // Apply TorqueScript/C++ syntax highlighting
+    contentHtml = lines.map(line => highlightLine(line)).join("\n");
+  } else {
+    contentHtml = escapeHtml(text);
+  }
+
+  panelBody.innerHTML = `
+    <div class="code-output">
+      <div class="line-nums">${lineNumsHtml}</div>
+      <div class="code-content${isError ? " error" : ""}">${contentHtml}</div>
+    </div>
+  `;
+}
+
+function highlightLine(line: string): string {
+  // Simple TorqueScript syntax highlighting
+  let result = escapeHtml(line);
+
+  // Comments (// and /* */)
+  result = result.replace(/(\/\/.*$)/gm, '<span class="cm">$1</span>');
+  result = result.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="cm">$1</span>');
+
+  // Strings (double and single quoted)
+  result = result.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="str">$1</span>');
+  result = result.replace(/('(?:[^'\\]|\\.)*')/g, '<span class="str">$1</span>');
+
+  // Numbers
+  result = result.replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>');
+
+  // Keywords
+  const keywords = [
+    'function', 'package', 'if', 'else', 'for', 'while', 'do', 'switch', 'case',
+    'default', 'break', 'continue', 'return', 'new', 'datablock', 'singleton',
+    'foreach', 'in', 'or', 'and', 'not', 'true', 'false', 'null',
+    'local', 'global', 'this', 'super', 'isObject', 'isDefined', 'strLen',
+    'strPos', 'strSub', 'strCat', 'trim', 'ltrim', 'rtrim', 'stripChars',
+    'firstWord', 'getWord', 'getWords', 'setWord', 'removeWord', 'getWordCount',
+    'findFirstFile', 'findNextFile', 'fileExt', 'fileName', 'filePath',
+    'exec', 'export', 'delete', 'schedule', 'echo', 'warn', 'error',
+    'activatePackage', 'deactivatePackage', 'isPackage', 'getPackageList',
+    'nameToID', 'getTag', 'getTaggedString', 'addTaggedString',
+    'containerBoxEmpty', 'containerCastRay', 'containerSearchNext',
+    'containerSearchCurrRadius', 'containerSearchCurrDist',
+    'vectorAdd', 'vectorSub', 'vectorCross', 'vectorDot', 'vectorLen',
+    'vectorDist', 'vectorNormalize', 'vectorScale', 'vectorLerp',
+    'MatrixCreate', 'MatrixMulVector', 'MatrixMulPoint',
+    'alxGetListenerf', 'alxListenerfv', 'alxGetSourcef', 'alxSourcefv',
+    'alxPlay', 'alxStop', 'alxStopAll', 'alxCreateSource',
+    'setRandomSeed', 'getRandom', 'getRandomF',
+    'spawnObject', 'createDataBlock', 'getName', 'getID', 'getClassName',
+    'save', 'loadJournal', 'playJournal', 'addComment',
+    'setModPaths', 'getModPaths', 'getBuildString', 'getSimTime',
+    'getRealTime', 'getTimeOfDay', 'setTimeOfDay',
+    'isFile', 'isWriteableFileName', 'fileOpenForRead', 'fileOpenForWrite',
+    'fileOpenForAppend', 'fileClose', 'fileReadLine', 'fileWriteLine',
+    'fileIsEOF', 'fileGetPosition', 'fileSetPosition',
+    'getWordCount', 'getFirstWord', 'getNextWord',
+  ];
+
+  // Build keyword regex
+  const kwRegex = new RegExp(`\\b(${keywords.join('|')})\\b`, 'gi');
+  result = result.replace(kwRegex, '<span class="kw">$1</span>');
+
+  // Function calls (word followed by parenthesis)
+  result = result.replace(/\b([a-zA-Z_]\w*)(\s*\()/g, '<span class="fn">$1</span>$2');
+
+  // Variables ($x, %y, @z)
+  result = result.replace(/([\$%@][a-zA-Z_]\w*)/g, '<span class="var">$1</span>');
+
+  // Operators
+  result = result.replace(/([=!<>]=?|[+\-*/%]=?|[&|]{2}?|::|\.\.|,|;|\{|\}|\[|\])/g, '<span class="op">$1</span>');
+
+  return result;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ─── Image output ───
+function renderImageOutput(bytes: Uint8Array, mime: string, name: string) {
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  panelBody.innerHTML = `
+    <div class="image-output">
+      <img src="${url}" alt="${escapeHtml(name)}" />
+    </div>
+  `;
+}
+
+// ─── Audio output ───
+function renderAudioOutput(bytes: Uint8Array, mime: string, name: string) {
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  panelBody.innerHTML = `
+    <div class="audio-output">
+      <div class="audio-filename">${escapeHtml(name)}</div>
+      <audio controls src="${url}">Your browser does not support audio playback.</audio>
+    </div>
+  `;
+}
+
+// ─── Hex output ───
+function renderHexFull(bytes: Uint8Array): string {
+  const lines: string[] = [];
+  const max = Math.min(bytes.length, 4096);
+  for (let i = 0; i < max; i += 16) {
+    const row = bytes.slice(i, i + 16);
+    const hex = Array.from(row).map((b) => b.toString(16).padStart(2, "0")).join(" ");
+    const ascii = Array.from(row)
+      .map((b) => (b >= 32 && b < 127 ? String.fromCharCode(b) : "."))
+      .join("");
+    lines.push(`${i.toString(16).padStart(8, "0")}  ${hex.padEnd(48)}  ${ascii}`);
+  }
+  if (bytes.length > max) lines.push(`… (${bytes.length - max} more bytes)`);
+  return lines.join("\n");
 }
 
 // ─── Download ───
@@ -253,26 +439,10 @@ function downloadName(name: string): string {
   return name.replace(/\.dso$/i, "");
 }
 
-function renderHexFull(bytes: Uint8Array): string {
-  const lines: string[] = [];
-  const max = Math.min(bytes.length, 4096);
-  for (let i = 0; i < max; i += 16) {
-    const row = bytes.slice(i, i + 16);
-    const hex = Array.from(row).map((b) => b.toString(16).padStart(2, "0")).join(" ");
-    const ascii = Array.from(row)
-      .map((b) => (b >= 32 && b < 127 ? String.fromCharCode(b) : "."))
-      .join("");
-    lines.push(`${i.toString(16).padStart(8, "0")}  ${hex.padEnd(48)}  ${ascii}`);
-  }
-  if (bytes.length > max) lines.push(`… (${bytes.length - max} more bytes)`);
-  return lines.join("\n");
-}
-
 // ─── Copy button ───
 copyBtn.addEventListener("click", () => {
   if (!lastOutput) return;
   navigator.clipboard.writeText(lastOutput).catch(() => {
-    // Fallback
     const ta = document.createElement("textarea");
     ta.value = lastOutput;
     document.body.appendChild(ta);
@@ -282,7 +452,7 @@ copyBtn.addEventListener("click", () => {
   });
 });
 
-// ─── Engine select (legacy — new code auto-detects) ───
+// ─── Engine select ───
 engineSelect.addEventListener("change", () => {
   if (currentResults.length > 0) {
     renderResult(currentResults[selectedIndex]);

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DSO Decompiler</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ─── Theme ─── */
     :root {
       --bg: #0f0f1a;
       --surface: #161628;
@@ -18,31 +18,117 @@
       --success: #4ade80;
       --warning: #fbbf24;
       --error: #f87171;
+      --line-num: #555570;
+      --line-num-bg: #12121e;
+      --keyword: #c084fc;
+      --string: #4ade80;
+      --number: #fbbf24;
+      --comment: #6b7280;
+      --operator: #f472b6;
+      --function: #60a5fa;
+      --variable: #fb923c;
     }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f5f5f7;
+        --surface: #ffffff;
+        --surface-alt: #f0f0f5;
+        --border: #d0d0dd;
+        --text: #1a1a2e;
+        --text-dim: #6b6b80;
+        --accent: #0077aa;
+        --accent-dim: #005577;
+        --success: #16a34a;
+        --warning: #d97706;
+        --error: #dc2626;
+        --line-num: #b0b0c0;
+        --line-num-bg: #f0f0f5;
+        --keyword: #7c3aed;
+        --string: #16a34a;
+        --number: #d97706;
+        --comment: #9ca3af;
+        --operator: #db2777;
+        --function: #2563eb;
+        --variable: #ea580c;
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+
     body {
       background: var(--bg);
       color: var(--text);
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 24px 20px;
-    }
+
+    /* ─── Header ─── */
     header {
-      margin-bottom: 24px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      background: var(--surface);
     }
     header h1 {
-      font-size: 1.6em;
+      font-size: 1.2em;
       font-weight: 600;
       color: var(--accent);
-      margin-bottom: 4px;
+      white-space: nowrap;
     }
     header p {
       color: var(--text-dim);
-      font-size: 0.9em;
+      font-size: 0.8em;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
+    header p a { color: var(--accent); text-decoration: none; }
+    header p a:hover { text-decoration: underline; }
+
+    /* ─── Controls ─── */
+    .controls {
+      padding: 8px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+    }
+    .controls select {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.85em;
+      max-width: 240px;
+    }
+    .controls label {
+      font-size: 0.8em;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .controls input[type="checkbox"] {
+      accent-color: var(--accent);
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ─── Drop zone ─── */
     .drop-zone {
       border: 2px dashed var(--border);
       border-radius: 12px;
@@ -51,59 +137,64 @@
       cursor: pointer;
       transition: all 0.2s;
       background: var(--surface);
-      margin-bottom: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
+      margin: 20px;
+      flex-shrink: 0;
     }
     .drop-zone:hover, .drop-zone.drag-over {
       border-color: var(--accent);
       background: var(--surface-alt);
     }
-    .drop-zone p {
-      color: var(--text-dim);
-      font-size: 1em;
-      margin: 0;
-      white-space: nowrap;
-    }
-    .drop-zone p:last-child {
-      font-size: 0.8em;
-      opacity: 0.6;
-    }
+    .drop-zone p { color: var(--text-dim); font-size: 1em; margin: 0; }
+    .drop-zone p:last-child { font-size: 0.8em; opacity: 0.6; margin-top: 6px; }
     input[type="file"] { display: none; }
 
+    /* ─── Main layout ─── */
     .layout {
-      display: grid;
-      grid-template-columns: 280px 1fr;
-      gap: 16px;
+      display: none;
+      flex: 1;
+      min-height: 0;
+      gap: 0;
     }
+    .layout.active { display: flex; }
 
-    /* Sidebar */
+    /* ─── Sidebar / Files pane ─── */
     .sidebar {
+      width: 280px;
+      min-width: 200px;
+      max-width: 400px;
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      max-height: 70vh;
+      border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     .sidebar-header {
-      padding: 10px 14px;
+      padding: 8px 14px;
       border-bottom: 1px solid var(--border);
       font-size: 0.75em;
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--text-dim);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sidebar-header label {
+      font-size: 0.9em;
+      text-transform: none;
+      letter-spacing: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
     }
     .file-list {
       overflow-y: auto;
       flex: 1;
     }
     .file-item {
-      padding: 10px 14px;
+      padding: 8px 14px;
       cursor: pointer;
       border-bottom: 1px solid var(--border);
       transition: background 0.15s;
@@ -111,126 +202,189 @@
     .file-item:hover { background: var(--surface-alt); }
     .file-item.selected { background: var(--accent-dim); }
     .file-name {
-      font-size: 0.85em;
+      font-size: 0.82em;
       font-weight: 500;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .file-meta {
-      font-size: 0.72em;
+      font-size: 0.7em;
       color: var(--text-dim);
       margin-top: 2px;
     }
+    .file-item.non-dso .file-name { color: var(--text-dim); }
 
-    /* Main panel */
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
+    /* ─── Resize handle ─── */
+    .resize-handle {
+      width: 5px;
+      cursor: col-resize;
+      background: transparent;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .resize-handle:hover { background: var(--accent-dim); }
+
+    /* ─── Main panel ─── */
+    .main-panel {
+      flex: 1;
       display: flex;
       flex-direction: column;
-      max-height: 70vh;
+      min-width: 0;
+      overflow: hidden;
     }
+
+    /* ─── Version card ─── */
+    .version-card {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 14px;
+      flex-shrink: 0;
+    }
+    .version-card .label {
+      font-size: 0.65em;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+    }
+    .version-card .game-name {
+      font-size: 0.95em;
+      font-weight: 600;
+      margin-top: 1px;
+    }
+    .version-card .version-num {
+      font-family: monospace;
+      font-size: 0.8em;
+      color: var(--accent);
+      margin-top: 1px;
+    }
+
+    /* ─── Panel header ─── */
     .panel-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 14px;
+      padding: 6px 14px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      background: var(--surface);
     }
-    .tabs {
-      display: flex;
-      gap: 4px;
-    }
+    .tabs { display: flex; gap: 4px; }
     .tab-btn {
       background: none;
       border: none;
       color: var(--text-dim);
-      padding: 4px 12px;
+      padding: 4px 10px;
       border-radius: 6px;
-      font-size: 0.75em;
+      font-size: 0.72em;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       cursor: pointer;
       transition: all 0.15s;
     }
     .tab-btn:hover { color: var(--text); }
-    .tab-btn.active {
-      background: var(--accent-dim);
-      color: var(--text);
-    }
-    .panel-actions {
-      display: flex;
-      gap: 6px;
-    }
+    .tab-btn.active { background: var(--accent-dim); color: var(--text); }
+    .panel-actions { display: flex; gap: 6px; }
     .btn {
       background: var(--surface-alt);
       border: 1px solid var(--border);
       color: var(--text-dim);
-      padding: 4px 12px;
+      padding: 4px 10px;
       border-radius: 6px;
-      font-size: 0.75em;
+      font-size: 0.72em;
       cursor: pointer;
       transition: all 0.15s;
     }
-    .btn:hover {
-      border-color: var(--accent);
-      color: var(--text);
-    }
-    .btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
+    .btn:hover { border-color: var(--accent); color: var(--text); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ─── Output pane ─── */
     .panel-body {
       flex: 1;
       overflow: auto;
+      min-height: 0;
     }
-    pre {
-      padding: 16px;
-      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-      font-size: 0.82em;
+
+    /* Code editor style */
+    .code-output {
+      display: flex;
+      min-height: 100%;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
+      font-size: 0.8em;
       line-height: 1.6;
+    }
+    .line-nums {
+      background: var(--line-num-bg);
+      color: var(--line-num);
+      padding: 12px 8px;
+      text-align: right;
+      user-select: none;
+      border-right: 1px solid var(--border);
+      min-width: 48px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .line-nums span {
+      display: block;
+      line-height: 1.6;
+      height: calc(1em * 1.6);
+    }
+    .code-content {
+      padding: 12px 16px;
       white-space: pre-wrap;
-      word-break: break-all;
+      word-break: break-word;
+      flex: 1;
+      overflow-x: auto;
+    }
+
+    /* Syntax highlighting */
+    .kw { color: var(--keyword); }
+    .str { color: var(--string); }
+    .num { color: var(--number); }
+    .cm { color: var(--comment); font-style: italic; }
+    .op { color: var(--operator); }
+    .fn { color: var(--function); }
+    .var { color: var(--variable); }
+
+    /* Error output */
+    .code-content.error { color: var(--error); }
+
+    /* Image output */
+    .image-output {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      min-height: 100%;
+    }
+    .image-output img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    /* Audio output */
+    .audio-output {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      gap: 12px;
       min-height: 200px;
     }
-    pre.error { color: var(--error); }
-    .status-bar {
-      padding: 6px 14px;
-      border-top: 1px solid var(--border);
-      font-size: 0.75em;
-      color: var(--text-dim);
-      flex-shrink: 0;
+    .audio-output audio {
+      width: 100%;
+      max-width: 480px;
     }
-
-    /* Version card */
-    .version-card {
-      background: var(--surface-alt);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-    }
-    .version-card .label {
-      font-size: 0.7em;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
+    .audio-filename {
+      font-size: 0.85em;
       color: var(--text-dim);
     }
-    .version-card .game-name {
-      font-size: 1.1em;
-      font-weight: 600;
-      margin-top: 2px;
-    }
-    .version-card .version-num {
-      font-family: monospace;
-      color: var(--accent);
-      margin-top: 2px;
-    }
 
+    /* Empty state */
     .empty-state {
       display: flex;
       align-items: center;
@@ -240,61 +394,72 @@
       font-size: 0.9em;
     }
 
+    /* ─── Status bar ─── */
+    .status-bar {
+      padding: 4px 14px;
+      border-top: 1px solid var(--border);
+      font-size: 0.72em;
+      color: var(--text-dim);
+      flex-shrink: 0;
+      background: var(--surface);
+    }
+
+    /* ─── Responsive ─── */
     @media (max-width: 768px) {
-      .layout { grid-template-columns: 1fr; }
-      .sidebar { max-height: 200px; }
+      .sidebar { width: 200px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>DSO Decompiler</h1>
-      <p>Web port of <a href="https://github.com/Elletra/dso-sharp" target="_blank" rel="noreferrer" style="color:var(--accent)">Elletra/dso-sharp</a> — drop a .dso file or zip archive to decompile TorqueScript bytecode.</p>
-    </header>
+  <header>
+    <h1>DSO Decompiler</h1>
+    <p>Web port of <a href="https://github.com/Elletra/dso-sharp" target="_blank" rel="noreferrer">Elletra/dso-sharp</a> — drop a .dso file or zip archive to decompile TorqueScript bytecode.</p>
+  </header>
 
-    <div style="margin-bottom:16px;">
-      <select id="engine-select" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:8px 14px;border-radius:6px;font-size:0.9em;width:260px;max-width:100%;text-overflow:ellipsis;">
-        <option value="auto">Auto-detect game</option>
-        <option value="TGE10">TGE 1.0–1.3</option>
-        <option value="TGE14">TGE 1.4</option>
-        <option value="Tribes2">Tribes 2</option>
-        <option value="TFD">The Forgettable Dungeon</option>
-        <option value="BlocklandV1">Blockland v1</option>
-        <option value="BlocklandV20">Blockland v20</option>
-        <option value="BlocklandV21">Blockland v21</option>
-        <option value="Constructor">Torque Constructor</option>
-      </select>
-    </div>
+  <div class="controls" id="controls" style="display:none;">
+    <select id="engine-select">
+      <option value="auto">Auto-detect game</option>
+      <option value="TGE10">TGE 1.0–1.3</option>
+      <option value="TGE14">TGE 1.4</option>
+      <option value="Tribes2">Tribes 2</option>
+      <option value="TFD">The Forgettable Dungeon</option>
+      <option value="BlocklandV1">Blockland v1</option>
+      <option value="BlocklandV20">Blockland v20</option>
+      <option value="BlocklandV21">Blockland v21</option>
+      <option value="Constructor">Torque Constructor</option>
+    </select>
+  </div>
 
-    <div class="drop-zone" id="drop-zone" style="display:block;">
-      <input type="file" id="file-input" accept="*/*" style="display:none;" />
-      <p style="color:var(--text-dim);font-size:1em;margin:0;">Drag &amp; drop a .dso file or archive here, or click to browse</p>
-      <p style="font-size:0.8em;margin-top:6px;opacity:0.6;color:var(--text-dim);">.dso · .zip — processed entirely in your browser</p>
-    </div>
+  <div class="drop-zone" id="drop-zone">
+    <input type="file" id="file-input" accept="*/*" />
+    <p>Drag &amp; drop a .dso file or archive here, or click to browse</p>
+    <p>.dso · .zip — processed entirely in your browser</p>
+  </div>
 
-    <div class="layout" id="layout" style="display:none;">
-      <aside class="sidebar">
-        <div class="sidebar-header">Files</div>
-        <div class="file-list" id="file-list"></div>
-      </aside>
+  <div class="layout" id="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span>Files</span>
+        <label><input type="checkbox" id="dso-filter" /> .dso only</label>
+      </div>
+      <div class="file-list" id="file-list"></div>
+    </aside>
 
-      <div>
-        <div id="version-card"></div>
-        <div class="panel">
-          <div class="panel-header">
-            <div class="tabs" id="tabs"></div>
-            <div class="panel-actions">
-              <button class="btn" id="copy-btn">Copy</button>
-              <button class="btn" id="download-btn" disabled>Download</button>
-            </div>
-          </div>
-          <div class="panel-body">
-            <pre id="output"><div class="empty-state">Select a file to view decompiled output</div></pre>
-          </div>
-          <div class="status-bar" id="status"></div>
+    <div class="resize-handle" id="resize-handle"></div>
+
+    <div class="main-panel">
+      <div id="version-card"></div>
+      <div class="panel-header">
+        <div class="tabs" id="tabs"></div>
+        <div class="panel-actions">
+          <button class="btn" id="copy-btn">Copy</button>
+          <button class="btn" id="download-btn" disabled>Download</button>
         </div>
       </div>
+      <div class="panel-body" id="panel-body">
+        <div class="empty-state">Select a file to view decompiled output</div>
+      </div>
+      <div class="status-bar" id="status"></div>
     </div>
   </div>
 
