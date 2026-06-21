@@ -55,9 +55,7 @@ export class Parser {
     }
     this.consume(TokenType.RBracket, "Expected '}' after package body");
     this.consume(TokenType.Semicolon, "Expected ';' after package block");
-    // Return a synthetic statement that wraps the package
-    // For now, just return the first function (simplified)
-    return fns[0] || new AST.FunctionDeclStmt(name, [], [], null);
+    return new AST.PackageDeclStmt(name, fns);
   }
 
   private functionDecl(): AST.FunctionDeclStmt | null {

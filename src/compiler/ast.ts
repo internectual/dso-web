@@ -65,6 +65,16 @@ export class FunctionDeclStmt extends Stmt {
   }
 }
 
+export class PackageDeclStmt extends Stmt {
+  name: Token;
+  functions: FunctionDeclStmt[];
+  constructor(name: Token, functions: FunctionDeclStmt[]) {
+    super(name.line);
+    this.name = name;
+    this.functions = functions;
+  }
+}
+
 // Expressions
 export class ParenthesisExpr extends Expr {
   expr: Expr;

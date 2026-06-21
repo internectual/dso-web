@@ -221,6 +221,12 @@ export class Compiler {
       this.breakLineCount++;
       return this.precompileFunction(stmt);
     }
+    if (stmt instanceof AST.PackageDeclStmt) {
+      this.breakLineCount++;
+      let sum = 0;
+      for (const fn of stmt.functions) sum += this.precompileFunction(fn);
+      return sum;
+    }
     this.breakLineCount++;
     return this.precompileExpr(stmt as AST.Expr, TypeReq.None);
   }
@@ -325,6 +331,8 @@ export class Compiler {
       this.compileLoop(context, stmt);
     } else if (stmt instanceof AST.FunctionDeclStmt) {
       this.compileFunction(context, stmt);
+    } else if (stmt instanceof AST.PackageDeclStmt) {
+      this.compilePackage(context, stmt);
     } else if (stmt instanceof AST.Expr) {
       this.compileExpr(context, stmt as AST.Expr, TypeReq.None);
     }
@@ -416,6 +424,14 @@ export class Compiler {
     this.inFunction = false;
     this.currentStringTable = prevS;
     this.currentFloatTable = prevF;
+  }
+
+  private compilePackage(context: CompileContext, pkg: AST.PackageDeclStmt): void {
+    // Compile each function in the package
+    for (const fn of pkg.functions) {
+      fn.packageName = pkg.name;
+      this.compileFunction(context, fn);
+    }
   }
 
   // --- Expression compilation ---
