@@ -388,7 +388,7 @@ export class Compiler {
     this.compileBlock(context, fn.stmts);
     context.breakPoint = savedBreak; context.continuePoint = savedCont;
     this.emit(context, this.getOpcodeValue(OpCode.Return));
-    context.codeStream[endJmpIp] = context.ip - 1;
+    context.codeStream[endJmpIp] = context.ip;
     this.inFunction = false;
     this.currentStringTable = prevS;
     this.currentFloatTable = prevF;
@@ -515,12 +515,16 @@ export class Compiler {
     else if (sub === TypeReq.Int) this.emit(c, this.getOpcodeValue(OpCode.SaveVarUInt));
     else this.emit(c, this.getOpcodeValue(OpCode.SaveVarFlt));
     if (t !== sub) this.emit(c, this.getOpcodeValue(this.conversionOp(sub, t)));
-    c.ip++;
   }
 
   private compileAssignOp(c: CompileContext, e: AST.AssignOpExpr, t: TypeReq): void {
     const { subType, operand } = this.getAssignOpInfo(e.op.type);
-    this.compileExpr(c, e.expr, subType);
+    if (e.expr) {
+      this.compileExpr(c, e.expr, subType);
+    } else {
+      // Postfix ++/--: push literal 1 as the operand
+      this.compileIntExpr(c, new AST.IntExpr(e.lineNo, 1), subType);
+    }
     const ident = (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.name.literal;
     if (e.varExpr.arrayIndex) {
       this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
@@ -555,7 +559,7 @@ export class Compiler {
     this.compileExpr(c, e.objectExpr, TypeReq.String);
     this.emit(c, this.getOpcodeValue(OpCode.SetCurObject));
     this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
-    const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName.literal, fIp);
+    const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName!.literal, fIp);
     if (e.arrayExpr) { this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr)); this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray)); }
     if (t === TypeReq.Int) this.emit(c, this.getOpcodeValue(OpCode.LoadFieldUInt));
     else if (t === TypeReq.Float) this.emit(c, this.getOpcodeValue(OpCode.LoadFieldFlt));
@@ -569,7 +573,7 @@ export class Compiler {
     if (e.objectExpr) { this.compileExpr(c, e.objectExpr, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.SetCurObject)); }
     else this.emit(c, this.getOpcodeValue(OpCode.SetCurObjectNew));
     this.emit(c, this.getOpcodeValue(OpCode.SetCurField));
-    const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName.literal, fIp);
+    const fIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.slotName!.literal, fIp);
     if (e.arrayExpr) { this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr)); this.emit(c, this.getOpcodeValue(OpCode.SetCurFieldArray)); }
     this.emit(c, this.getOpcodeValue(OpCode.TerminateRewindStr));
     this.emit(c, this.getOpcodeValue(OpCode.SaveFieldStr));
