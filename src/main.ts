@@ -272,6 +272,12 @@ function renderTabContent(tabId: string, result: DsoFileResult, kind: FileKind) 
     lastOutput = "";
     lastFileName = downloadName(result.name || "audio");
     downloadBtn.disabled = true;
+  } else if (kind.kind === "video" && result.bytes) {
+    renderVideoOutput(result.bytes, kind.mime, result.name);
+    statusEl.textContent = `Video file (${result.size.toLocaleString()} bytes)`;
+    lastOutput = "";
+    lastFileName = downloadName(result.name || "video");
+    downloadBtn.disabled = true;
   } else if (kind.kind === "binary" && result.bytes) {
     const hex = renderHexFull(result.bytes);
     renderCodeOutput(hex, false);
@@ -464,6 +470,19 @@ function renderAudioOutput(bytes: Uint8Array, mime: string, name: string) {
     <div class="audio-output">
       <div class="audio-filename">${escapeHtml(name)}</div>
       <audio controls src="${url}">Your browser does not support audio playback.</audio>
+    </div>
+  `;
+}
+
+// ─── Video output ───
+function renderVideoOutput(bytes: Uint8Array, mime: string, name: string) {
+  // @ts-ignore BlobPart type compatibility
+  const blob = new Blob([bytes as BlobPart], { type: mime });
+  const url = URL.createObjectURL(blob);
+  panelBody.innerHTML = `
+    <div class="video-output">
+      <div class="video-filename">${escapeHtml(name)}</div>
+      <video controls src="${url}">Your browser does not support video playback.</video>
     </div>
   `;
 }

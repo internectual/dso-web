@@ -178,6 +178,7 @@ export type FileKind =
   | { kind: "dso" }
   | { kind: "image"; mime: string }
   | { kind: "audio"; mime: string }
+  | { kind: "video"; mime: string }
   | { kind: "text"; language: string }
   | { kind: "binary" };
 
@@ -202,6 +203,18 @@ const AUDIO_MIME: Record<string, string> = {
   wma: "audio/x-ms-wma",
   mid: "audio/midi",
   midi: "audio/midi",
+};
+
+const VIDEO_MIME: Record<string, string> = {
+  avi: "video/x-msvideo",
+  mkv: "video/x-matroska",
+  m4v: "video/x-m4v",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  wmv: "video/x-ms-wmv",
+  flv: "video/x-flv",
+  ogv: "video/ogg",
 };
 
 const TEXT_LANG: Record<string, string> = {
@@ -238,6 +251,7 @@ export function detectFileKind(name: string): FileKind {
   if (ext === "dso") return { kind: "dso" };
   if (IMAGE_MIME[ext]) return { kind: "image", mime: IMAGE_MIME[ext] };
   if (AUDIO_MIME[ext]) return { kind: "audio", mime: AUDIO_MIME[ext] };
+  if (VIDEO_MIME[ext]) return { kind: "video", mime: VIDEO_MIME[ext] };
   if (TEXT_LANG[ext]) return { kind: "text", language: TEXT_LANG[ext] };
   return { kind: "binary" };
 }
