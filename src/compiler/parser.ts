@@ -89,7 +89,7 @@ export class Parser {
     if (this.match(TokenType.Dollar) || this.match(TokenType.Modulus)) {
       const isGlobal = this.previous().type === TokenType.Dollar;
       const name = this.consume(TokenType.Label, 'Expected variable name');
-      return new AST.VarExpr(name, null, isGlobal ? VarType.Global : VarType.Local);
+      return new AST.VarExpr(name, null, null, isGlobal ? VarType.Global : VarType.Local);
     }
     return null;
   }
@@ -633,7 +633,7 @@ export class Parser {
         break;
       } else {
         if (expr instanceof AST.VarExpr) {
-          expr = new AST.VarExpr(name, null, expr.vtype);
+          expr = new AST.VarExpr(name, expr.name, null, expr.vtype);
         } else {
           expr = new AST.ConstantExpr(name);
         }
@@ -721,7 +721,7 @@ export class Parser {
     if (this.match(TokenType.Dollar) || this.match(TokenType.Modulus)) {
       const isGlobal = this.previous().type === TokenType.Dollar;
       const name = this.consume(TokenType.Label, 'Expected variable name');
-      return new AST.VarExpr(name, null, isGlobal ? VarType.Global : VarType.Local);
+      return new AST.VarExpr(name, null, null, isGlobal ? VarType.Global : VarType.Local);
     }
     return null;
   }

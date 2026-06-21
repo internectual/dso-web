@@ -44,10 +44,9 @@ for (const target of targets) {
   }
 }
 
-// Create VL2 zip archive
+// Create VL2 zip archive using Python
 const vl2Path = '/home/methodown/dso-web/disco/decomptest.vl2';
-execSync(`cd ${outDir} && zip -9 ${vl2Path} *`, { stdio: 'inherit' });
+execSync(`python3 /tmp/vl2build/makezip.py ${outDir} ${vl2Path}`, { stdio: 'inherit' });
 
 console.log('\nCreated ' + vl2Path);
-console.log('Contents:');
 execSync(`unzip -l ${vl2Path}`, { stdio: 'inherit' });

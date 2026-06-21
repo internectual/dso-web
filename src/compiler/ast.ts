@@ -138,10 +138,11 @@ export class FloatUnaryExpr extends Expr {
 
 export class VarExpr extends Expr {
   name: Token;
+  namespace: Token | null;
   arrayIndex: Expr | null;
   vtype: VarType;
-  constructor(name: Token, arrayIndex: Expr | null, vtype: VarType) {
-    super(name.line); this.name = name; this.arrayIndex = arrayIndex; this.vtype = vtype;
+  constructor(name: Token, namespace: Token | null, arrayIndex: Expr | null, vtype: VarType) {
+    super(name.line); this.name = name; this.namespace = namespace; this.arrayIndex = arrayIndex; this.vtype = vtype;
   }
 }
 

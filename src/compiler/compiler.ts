@@ -477,7 +477,8 @@ export class Compiler {
 
   private compileVarExpr(c: CompileContext, e: AST.VarExpr, t: TypeReq): void {
     if (t === TypeReq.None) return;
-    const ident = (e.vtype === VarType.Global ? '$' : '%') + e.name.literal;
+    const prefix = e.vtype === VarType.Global ? '$' : '%';
+    const ident = e.namespace ? prefix + e.namespace.literal + '::' + e.name.literal : prefix + e.name.literal;
     if (e.arrayIndex) {
       this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
       const idIp = this.context_ip(c); this.identTable.add(this.currentStringTable, ident, idIp);
@@ -497,7 +498,9 @@ export class Compiler {
   private compileAssign(c: CompileContext, e: AST.AssignExpr, t: TypeReq): void {
     const sub = e.expr instanceof AST.IntExpr ? TypeReq.Int : e.expr instanceof AST.FloatExpr ? TypeReq.Float : TypeReq.String;
     this.compileExpr(c, e.expr, sub);
-    const ident = (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.name.literal;
+    const ident = e.varExpr.namespace
+      ? (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.namespace.literal + '::' + e.varExpr.name.literal
+      : (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.name.literal;
     if (e.varExpr.arrayIndex) {
       if (sub === TypeReq.String) this.emit(c, this.getOpcodeValue(OpCode.AdvanceStr));
       this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
@@ -525,7 +528,9 @@ export class Compiler {
       // Postfix ++/--: push literal 1 as the operand
       this.compileIntExpr(c, new AST.IntExpr(e.lineNo, 1), subType);
     }
-    const ident = (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.name.literal;
+    const ident = e.varExpr.namespace
+      ? (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.namespace.literal + '::' + e.varExpr.name.literal
+      : (e.varExpr.vtype === VarType.Global ? '$' : '%') + e.varExpr.name.literal;
     if (e.varExpr.arrayIndex) {
       this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
       const idIp = this.context_ip(c); this.identTable.add(this.currentStringTable, ident, idIp);
@@ -581,7 +586,6 @@ export class Compiler {
   }
 
   private compileObjectDecl(c: CompileContext, e: AST.ObjectDeclExpr, t: TypeReq): void {
-    this.emit(c, this.getOpcodeValue(OpCode.LoadImmedUInt), 0);
     this.compileSubObject(c, e, true);
     if (t !== TypeReq.Int) this.emit(c, this.getOpcodeValue(this.conversionOp(TypeReq.Int, t)));
   }
@@ -589,9 +593,20 @@ export class Compiler {
   private compileSubObject(c: CompileContext, e: AST.ObjectDeclExpr, root: boolean): void {
     const start = c.ip;
     this.emit(c, this.getOpcodeValue(OpCode.PushFrame));
-    this.compileExpr(c, e.className, TypeReq.String);
+    // Class name: emit LoadImmedIdent + ident table entry
+    const classStrIdx = this.currentStringTable.add(e.className.name.literal, false, false);
+    this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
+    const classIp = this.context_ip(c);
+    this.identTable.add(this.currentStringTable, e.className.name.literal, classIp);
     this.emit(c, this.getOpcodeValue(OpCode.Push));
-    this.compileExpr(c, e.objectNameExpr, TypeReq.String);
+    // Object name: emit LoadImmedIdent + ident table entry
+    if (e.objectNameExpr instanceof AST.ConstantExpr) {
+      this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
+      const objIp = this.context_ip(c);
+      this.identTable.add(this.currentStringTable, e.objectNameExpr.name.literal, objIp);
+    } else {
+      this.compileExpr(c, e.objectNameExpr, TypeReq.String);
+    }
     this.emit(c, this.getOpcodeValue(OpCode.Push));
     for (const arg of e.args) { this.compileExpr(c, arg, TypeReq.String); this.emit(c, this.getOpcodeValue(OpCode.Push)); }
     this.emit(c, this.getOpcodeValue(OpCode.CreateObject));
