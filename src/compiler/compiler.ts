@@ -479,11 +479,7 @@ export class Compiler {
 
   private compileConstantExpr(c: CompileContext, e: AST.ConstantExpr, t: TypeReq): void {
     if (t === TypeReq.None) return;
-    if (t === TypeReq.String) {
-      const i = this.currentStringTable.add(e.name.literal, false, false);
-      this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
-      const idIp = this.context_ip(c); this.identTable.add(this.currentStringTable, e.name.literal, idIp);
-    }
+    if (t === TypeReq.String) { const i = this.currentStringTable.add(e.name.literal, false, false); this.emit(c, this.getOpcodeValue(OpCode.LoadImmedStr), i); }
     else { const v = this.stringToNumber(e.name.literal); if (t === TypeReq.Float) { const i = this.addFloat(v); this.emit(c, this.getOpcodeValue(OpCode.LoadImmedFlt), i); } else this.emit(c, this.getOpcodeValue(OpCode.LoadImmedUInt), v | 0); }
   }
 
