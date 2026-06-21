@@ -377,6 +377,30 @@ export class Parser {
       return expr;
     }
 
+    // Check for field assignment: SlotAccessExpr with non-null slotName (field access)
+    if (expr instanceof AST.SlotAccessExpr && expr.slotName !== null) {
+      if (this.match(TokenType.Assign)) {
+        const rexpr = this.expression();
+        return new AST.SlotAssignExpr(expr.objectExpr, null, expr.slotName, rexpr);
+      }
+      if (this.check(TokenType.PlusPlus) || this.check(TokenType.MinusMinus)) {
+        const op = this.advance();
+        return new AST.ParenthesisExpr(new AST.SlotAssignOpExpr(expr.objectExpr, null, expr.slotName, null, op));
+      }
+      const slotAssignOpTypes = [
+        TokenType.PlusAssign, TokenType.MinusAssign, TokenType.MultiplyAssign,
+        TokenType.DivideAssign, TokenType.ModulusAssign, TokenType.AndAssign,
+        TokenType.OrAssign, TokenType.XorAssign, TokenType.ShiftLeftAssign,
+        TokenType.ShiftRightAssign,
+      ];
+      if (slotAssignOpTypes.includes(this.peek().type)) {
+        const op = this.advance();
+        const rexpr = this.expression();
+        return new AST.SlotAssignOpExpr(expr.objectExpr, null, expr.slotName, rexpr, op);
+      }
+      return expr;
+    }
+
     // Check for array element assignment: SlotAccessExpr with null slotName (array access)
     if (expr instanceof AST.SlotAccessExpr && expr.slotName === null && expr.arrayExpr !== null) {
       if (this.match(TokenType.Assign)) {
@@ -590,16 +614,9 @@ export class Parser {
       expr = new AST.SlotAccessExpr(expr, arrAccess, label);
     }
 
-    // Handle direct array access: expr[expr]
-    while (this.check(TokenType.LeftSquareBracket)) {
-      this.advance();
-      const index = this.expression();
-      this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
-      expr = new AST.SlotAccessExpr(expr, index, null);
-    }
-
-    // Handle namespace::name calls
-    if (expr instanceof AST.ConstantExpr && this.check(TokenType.DoubleColon)) {
+    // Handle namespace::name for both constants and variables (including chained ::)
+    // Must come BEFORE array access so $Game::argv[$i] parses correctly
+    while ((expr instanceof AST.ConstantExpr || expr instanceof AST.VarExpr) && this.check(TokenType.DoubleColon)) {
       this.advance();
       const name = this.consume(TokenType.Label, 'Expected name after ::');
       if (this.check(TokenType.LParen)) {
@@ -612,11 +629,40 @@ export class Parser {
           }
         }
         this.consume(TokenType.RParen, "Expected ')' after arguments");
-        expr = new AST.FuncCallExpr(name, expr.name, args, FuncCallType.MethodCall);
+        expr = new AST.FuncCallExpr(name, expr instanceof AST.ConstantExpr ? expr.name : expr.name, args, FuncCallType.MethodCall);
+        break;
       } else {
-        expr = new AST.ConstantExpr(name);
+        if (expr instanceof AST.VarExpr) {
+          expr = new AST.VarExpr(name, null, expr.vtype);
+        } else {
+          expr = new AST.ConstantExpr(name);
+        }
       }
-      return expr;
+    }
+    if (expr instanceof AST.FuncCallExpr) return expr;
+
+    // Handle direct array access: expr[expr]
+    while (this.check(TokenType.LeftSquareBracket)) {
+      this.advance();
+      const index = this.expression();
+      this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
+      if (expr instanceof AST.VarExpr && expr.arrayIndex === null) {
+        expr.arrayIndex = index;
+      } else {
+        expr = new AST.SlotAccessExpr(expr, index, null);
+      }
+    }
+
+    // Handle slot access chains
+    while (this.check(TokenType.Dot)) {
+      this.advance();
+      const label = this.consume(TokenType.Label, 'Expected label after .');
+      let arrAccess: AST.Expr | null = null;
+      if (this.match(TokenType.LeftSquareBracket)) {
+        arrAccess = this.expression();
+        this.consume(TokenType.RightSquareBracket, "Expected ']'");
+      }
+      expr = new AST.SlotAccessExpr(expr, arrAccess, label);
     }
 
     // Handle method calls on objects: expr.field(args)
@@ -631,7 +677,6 @@ export class Parser {
       }
       this.consume(TokenType.RParen, "Expected ')' after arguments");
       expr = new AST.FuncCallExpr(expr.slotName, null, args, FuncCallType.MethodCall);
-      // Store the object for potential use
       (expr as any).objectExpr = { name: expr.name, namespace: null };
       return expr;
     }
@@ -665,6 +710,10 @@ export class Parser {
     }
     if (this.match(TokenType.False)) {
       return new AST.IntExpr(this.previous().line, 0);
+    }
+    if (this.match(TokenType.New)) {
+      const className = this.consume(TokenType.Label, 'Expected class name after new');
+      return this.objectDecl(className, false, false);
     }
     if (this.match(TokenType.Label)) {
       return new AST.ConstantExpr(this.previous());
@@ -708,5 +757,51 @@ export class Parser {
   private consume(type: TokenType, message: string): Token {
     if (this.check(type)) return this.advance();
     throw new SyntaxError(message, this.peek());
+  }
+
+  private objectDecl(className: Token, structDecl: boolean, consumeTrailingSemicolon: boolean): AST.ObjectDeclExpr {
+    let objectNameExpr: AST.Expr = new AST.ConstantExpr(className);
+    let parentObject: Token | null = null;
+    const args: AST.Expr[] = [];
+
+    if (this.match(TokenType.LParen)) {
+      if (!this.check(TokenType.RParen)) {
+        objectNameExpr = this.expression();
+        if (this.match(TokenType.Colon)) {
+          parentObject = this.consume(TokenType.Label, 'Expected parent object name after :');
+        }
+        while (this.match(TokenType.Comma)) {
+          args.push(this.expression());
+        }
+      }
+      this.consume(TokenType.RParen, "Expected ')' after object arguments");
+    }
+
+    const slots: AST.SlotAssignExpr[] = [];
+    const subObjects: AST.ObjectDeclExpr[] = [];
+    if (this.match(TokenType.LBracket)) {
+      while (!this.check(TokenType.RBracket) && !this.isAtEnd()) {
+        if (this.match(TokenType.New)) {
+          const subClassName = this.consume(TokenType.Label, 'Expected class name after new');
+          subObjects.push(this.objectDecl(subClassName, false, true));
+          continue;
+        }
+        const slot = this.slotAssign();
+        if (slot) {
+          slots.push(slot);
+          continue;
+        }
+        throw new SyntaxError("Expected slot assignment or nested object", this.peek());
+      }
+      this.consume(TokenType.RBracket, "Expected '}' after object body");
+    }
+
+    if (consumeTrailingSemicolon) {
+      this.consume(TokenType.Semicolon, "Expected ';' after nested object");
+    }
+
+    return new AST.ObjectDeclExpr(
+      new AST.ConstantExpr(className), parentObject, objectNameExpr, args, slots, subObjects, structDecl
+    );
   }
 }

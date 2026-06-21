@@ -163,6 +163,7 @@ export class Compiler {
     this.globalStringTable = new StringTable();
     this.functionStringTable = new StringTable();
     this.identTable = new IdentTable();
+    this.identTable.globalStringTable = this.globalStringTable;
     this.currentStringTable = this.globalStringTable;
     this.currentFloatTable = this.globalFloatTable;
     this.inFunction = false;
@@ -178,7 +179,7 @@ export class Compiler {
     if (stmts.length > 0) this.compileBlock(context, stmts);
     context.codeStream[context.ip++] = this.getOpcodeValue(OpCode.Return);
 
-    return this.serialize(context, context.ip, this.breakLineCount);
+    return this.serialize(context, context.ip, this.breakLineCount * 2);
   }
 
   // --- Precompile pass ---
