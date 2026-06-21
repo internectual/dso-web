@@ -402,18 +402,29 @@ export class Compiler {
     this.inFunction = true;
     const start = context.ip;
     this.emit(context, this.getOpcodeValue(OpCode.FuncDecl));
-    const nameIp = context.ip++;
-    this.identTable.add(this.globalStringTable, fn.functionName.literal, nameIp);
-    const nsIp = context.ip++;
-    if (fn.namespace) this.identTable.add(this.globalStringTable, fn.namespace.literal, nsIp);
-    const pkgIp = context.ip++;
-    if (fn.packageName) this.identTable.add(this.globalStringTable, fn.packageName.literal, pkgIp);
+    // Write string index directly at operand position (like TGE14 compiler)
+    const nameIdx = this.globalStringTable.add(fn.functionName.literal, false, false);
+    context.codeStream[context.ip] = nameIdx;
+    this.identTable.add(this.globalStringTable, fn.functionName.literal, context.ip);
+    context.ip++;
+    // Namespace
+    const nsIdx = fn.namespace ? this.globalStringTable.add(fn.namespace.literal, false, false) : 0;
+    context.codeStream[context.ip] = nsIdx;
+    if (fn.namespace) this.identTable.add(this.globalStringTable, fn.namespace.literal, context.ip);
+    context.ip++;
+    // Package
+    const pkgIdx = fn.packageName ? this.globalStringTable.add(fn.packageName.literal, false, false) : 0;
+    context.codeStream[context.ip] = pkgIdx;
+    if (fn.packageName) this.identTable.add(this.globalStringTable, fn.packageName.literal, context.ip);
+    context.ip++;
     this.emit(context, fn.stmts.length > 0 ? 1 : 0);
     const endJmpIp = context.ip++;
     this.emit(context, fn.args.length);
     for (const arg of fn.args) {
-      const argIp = context.ip++;
-      this.identTable.add(this.globalStringTable, (arg.vtype === VarType.Global ? '$' : '%') + arg.name.literal, argIp);
+      const strIdx = this.globalStringTable.add((arg.vtype === VarType.Global ? '$' : '%') + arg.name.literal, false, false);
+      context.codeStream[context.ip] = strIdx;
+      this.identTable.add(this.globalStringTable, (arg.vtype === VarType.Global ? '$' : '%') + arg.name.literal, context.ip);
+      context.ip++;
     }
     const savedBreak = context.breakPoint, savedCont = context.continuePoint;
     context.breakPoint = 0; context.continuePoint = 0;
@@ -521,14 +532,20 @@ export class Compiler {
     const ident = e.namespace ? prefix + e.namespace.literal + '::' + e.name.literal : prefix + e.name.literal;
     if (e.arrayIndex) {
       this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
-      const idIp = this.context_ip(c); this.identTable.add(this.currentStringTable, ident, idIp);
+      const strIdx = this.currentStringTable.add(ident, false, false);
+      c.codeStream[c.ip] = strIdx;
+      this.identTable.add(this.currentStringTable, ident, c.ip);
+      c.ip++;
       this.emit(c, this.getOpcodeValue(OpCode.AdvanceStr));
       this.compileExpr(c, e.arrayIndex, TypeReq.String);
       this.emit(c, this.getOpcodeValue(OpCode.RewindStr));
       this.emit(c, this.getOpcodeValue(OpCode.SetCurVarArray));
     } else {
       this.emit(c, this.getOpcodeValue(OpCode.SetCurVar));
-      const idIp = this.context_ip(c); this.identTable.add(this.currentStringTable, ident, idIp);
+      const strIdx = this.currentStringTable.add(ident, false, false);
+      c.codeStream[c.ip] = strIdx;
+      this.identTable.add(this.currentStringTable, ident, c.ip);
+      c.ip++;
     }
     if (t === TypeReq.Int) this.emit(c, this.getOpcodeValue(OpCode.LoadVarUInt));
     else if (t === TypeReq.Float) this.emit(c, this.getOpcodeValue(OpCode.LoadVarFlt));
