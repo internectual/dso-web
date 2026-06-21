@@ -1811,26 +1811,55 @@ export class Builder {
   }
 
   private collapseIfLoop(node: IfNode): Node {
-    if (node.true.length !== 1 || node.false.length > 0) return node;
-    const loop = node.true[0];
-    if (!(loop instanceof LoopNode) || loop instanceof WhileLoopNode || loop instanceof ForLoopNode) return node;
-    // Only collapse when the if-test matches the loop-test
-    // (structural compare is approximate but matches dso-sharp behaviour)
-    if (!sameTest(node.test, loop.test)) return node;
-    const peek = this.peek();
-    if (peek && loop.body.length > 0 && peek.isExpression) {
-      let end = loop.body[loop.body.length - 1];
-      if (end.isExpression) {
-        if (end instanceof IfNode && end.canConvertToTernary()) end = end.convertToTernary();
-        const init = this.pop();
-        const forLoop = new ForLoopNode(init, loop.test, end);
-        forLoop.body = loop.body.slice(0, -1);
-        return forLoop;
+    if (node.false.length > 0) return node;
+    // Standard pattern (dso-sharp): if-block has exactly 1 child (the loop),
+    // init is on the expression stack
+    if (node.true.length === 1) {
+      const loop = node.true[0];
+      if (!(loop instanceof LoopNode) || loop instanceof WhileLoopNode || loop instanceof ForLoopNode) return node;
+      if (!sameTest(node.test, loop.test)) return node;
+      const peek = this.peek();
+      if (peek && loop.body.length > 0 && peek.isExpression) {
+        let end = loop.body[loop.body.length - 1];
+        if (end.isExpression) {
+          if (end instanceof IfNode && end.canConvertToTernary()) end = end.convertToTernary();
+          const init = this.pop();
+          // Don't use an AssignmentNode from the expression stack as for-loop init.
+          // An AssignmentNode on the stack means it's a separate statement that
+          // precedes the conditional block (e.g., %i = 0; while (...) {...}).
+          // A real for-loop init is compiled inside the conditional block.
+          if (!(init instanceof AssignmentNode)) {
+            const forLoop = new ForLoopNode(init, loop.test, end);
+            forLoop.body = loop.body.slice(0, -1);
+            return forLoop;
+          }
+        }
+      }
+      const whileLoop = new WhileLoopNode(loop.test);
+      whileLoop.body = loop.body;
+      return whileLoop;
+    }
+    // Extended pattern: if-block has 2+ children, first is an assignment (init),
+    // last is the loop. This handles our compiler's for-loop bytecode pattern
+    // where the init is compiled inside the conditional block.
+    if (node.true.length >= 2) {
+      const firstChild = node.true[0];
+      const lastChild = node.true[node.true.length - 1];
+      if (lastChild instanceof LoopNode && !(lastChild instanceof WhileLoopNode) && !(lastChild instanceof ForLoopNode)) {
+        if (sameTest(node.test, lastChild.test)) {
+          if (firstChild instanceof AssignmentNode && lastChild.body.length > 0) {
+            let end = lastChild.body[lastChild.body.length - 1];
+            if (end.isExpression) {
+              if (end instanceof IfNode && end.canConvertToTernary()) end = end.convertToTernary();
+              const forLoop = new ForLoopNode(firstChild, lastChild.test, end);
+              forLoop.body = lastChild.body.slice(0, -1);
+              return forLoop;
+            }
+          }
+        }
       }
     }
-    const whileLoop = new WhileLoopNode(loop.test);
-    whileLoop.body = loop.body;
-    return whileLoop;
+    return node;
   }
 
   private parseRange(fromAddress: number, toAddress: number): Node[] {
@@ -1839,7 +1868,6 @@ export class Builder {
     this.current = this.disasm.get(inner.currentAddress);
     return list;
   }
-
   private push(node: Node) { this.nodeStack.push(node); }
   private pop(): Node {
     const node = this.nodeStack.pop()!;

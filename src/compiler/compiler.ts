@@ -347,20 +347,44 @@ export class Compiler {
   }
 
   private compileLoop(context: CompileContext, stmt: AST.LoopStmt): void {
-    const start = context.ip;
-    if (stmt.init) this.compileExpr(context, stmt.init, TypeReq.None);
-    this.compileExpr(context, stmt.condition, TypeReq.Float);
-    this.emit(context, this.getOpcodeValue(OpCode.JmpIffNot));
-    const breakJmpIp = context.ip++;
-    const savedBreak = context.breakPoint, savedCont = context.continuePoint;
-    context.breakPoint = 0; context.continuePoint = 0;
-    this.compileBlock(context, stmt.body);
-    context.continuePoint = context.ip;
-    if (stmt.end) this.compileExpr(context, stmt.end, TypeReq.None);
-    this.compileExpr(context, stmt.condition, TypeReq.Float);
-    this.emit(context, this.getOpcodeValue(OpCode.JmpIff), start);
-    context.codeStream[breakJmpIp] = context.ip;
-    context.breakPoint = savedBreak; context.continuePoint = savedCont;
+    if (stmt.init) {
+      // For loop: generate if (!cond) break; init; do { body; end; } while (cond);
+      // This pattern matches what the decompiler's collapseIfLoop expects
+      this.compileExpr(context, stmt.condition, TypeReq.Float);
+      this.emit(context, this.getOpcodeValue(OpCode.JmpIffNot));
+      const breakJmpIp = context.ip++;
+      // Init goes inside the conditional block (after the JmpIffNot)
+      this.compileExpr(context, stmt.init, TypeReq.None);
+      // Fall through to body start
+      const bodyStart = context.ip;
+      const savedBreak = context.breakPoint, savedCont = context.continuePoint;
+      context.breakPoint = 0; context.continuePoint = 0;
+      this.compileBlock(context, stmt.body);
+      context.continuePoint = context.ip;
+      if (stmt.end) this.compileExpr(context, stmt.end, TypeReq.None);
+      // Condition check at the bottom of the loop
+      this.compileExpr(context, stmt.condition, TypeReq.Float);
+      this.emit(context, this.getOpcodeValue(OpCode.JmpIff), bodyStart);
+      context.codeStream[breakJmpIp] = context.ip;
+      context.breakPoint = savedBreak; context.continuePoint = savedCont;
+    } else {
+      // While loop: generate pattern that decompiler can recognize
+      // condition; JmpIffNot → break; body; condition; JmpIff → body_start; break:
+      // This creates Conditional block containing Loop block
+      this.compileExpr(context, stmt.condition, TypeReq.Float);
+      this.emit(context, this.getOpcodeValue(OpCode.JmpIffNot));
+      const breakJmpIp = context.ip++;
+      const bodyStart = context.ip;
+      const savedBreak = context.breakPoint, savedCont = context.continuePoint;
+      context.breakPoint = 0; context.continuePoint = 0;
+      this.compileBlock(context, stmt.body);
+      context.continuePoint = context.ip;
+      // Condition check at the bottom
+      this.compileExpr(context, stmt.condition, TypeReq.Float);
+      this.emit(context, this.getOpcodeValue(OpCode.JmpIff), bodyStart);
+      context.codeStream[breakJmpIp] = context.ip;
+      context.breakPoint = savedBreak; context.continuePoint = savedCont;
+    }
   }
 
   private compileFunction(context: CompileContext, fn: AST.FunctionDeclStmt): void {
