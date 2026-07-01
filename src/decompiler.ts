@@ -1942,7 +1942,7 @@ export function decompile(bytes: Uint8Array): DecompileResult {
     const loader = new FileLoader();
     const data = loader.load(bytes);
     const version = readDsoVersion(bytes);
-    const opsMap: OpsMap = VERSION_OPS[version] || OPS_MAPS.TGE10;
+    const opsMap: OpsMap = (version !== null ? VERSION_OPS[version] : null) || OPS_MAPS.TGE10;
     const ops = new Ops(opsMap);
     const reader = new BytecodeReader(data, ops);
     const disasm = disassemble(reader);
@@ -2038,7 +2038,7 @@ export function disassembleText(bytes: Uint8Array): DisassembleTextResult {
     const loader = new FileLoader();
     const data = loader.load(bytes);
     const version = readDsoVersion(bytes);
-    const opsMap: OpsMap = VERSION_OPS[version] || OPS_MAPS.TGE10;
+    const opsMap: OpsMap = (version !== null ? VERSION_OPS[version] : null) || OPS_MAPS.TGE10;
     const ops = new Ops(opsMap);
     const reader = new BytecodeReader(data, ops);
     const disasm = disassemble(reader);

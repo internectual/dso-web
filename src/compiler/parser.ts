@@ -24,7 +24,7 @@ export class Parser {
   parse(): AST.Stmt[] {
     const stmts: AST.Stmt[] = [];
     while (!this.isAtEnd()) {
-      const s = this.decl(stmts);
+      const s = this.decl();
       if (s) stmts.push(s);
     }
     return stmts;
@@ -86,10 +86,50 @@ export class Parser {
   private variable(): AST.VarExpr | null {
     if (this.match(TokenType.Dollar) || this.match(TokenType.Modulus)) {
       const isGlobal = this.previous().type === TokenType.Dollar;
-      const name = this.consume(TokenType.Label, 'Expected variable name');
-      return new AST.VarExpr(name, null, null, isGlobal ? VarType.Global : VarType.Local);
+      return this.parseVariableNameToken(isGlobal);
     }
     return null;
+  }
+
+  private parseVariableNameToken(isGlobal: boolean): AST.VarExpr {
+    const nextToken = this.peek();
+    const canBeName =
+      nextToken.type === TokenType.Label ||
+      nextToken.type === TokenType.Int ||
+      nextToken.type === TokenType.Float ||
+      (nextToken.type >= TokenType.Datablock && nextToken.type <= TokenType.Default) ||
+      nextToken.type === TokenType.Continue ||
+      nextToken.type === TokenType.Or;
+
+    if (canBeName) {
+      let nameToken = this.advance();
+      if (nameToken.literal === null || nameToken.literal === undefined) {
+        nameToken = {
+          ...nameToken,
+          literal: nameToken.lexeme
+        };
+      } else {
+        nameToken = {
+          ...nameToken,
+          literal: String(nameToken.literal)
+        };
+      }
+      return new AST.VarExpr(nameToken, null, null, isGlobal ? VarType.Global : VarType.Local);
+    }
+    throw new SyntaxError('Expected variable name', nextToken);
+  }
+
+  private parseArrayIndex(): AST.Expr {
+    let expr = this.expression();
+    const line = this.previous().line;
+    const concatOp = { type: TokenType.Concat, lexeme: "@", literal: null, line: line, position: 0 };
+    while (this.match(TokenType.Comma)) {
+      const right = this.expression();
+      const underscore = new AST.StringConstExpr(line, "_", false);
+      const intermediate = new AST.StrCatExpr(expr, underscore, concatOp);
+      expr = new AST.StrCatExpr(intermediate, right, concatOp);
+    }
+    return expr;
   }
 
   private statementList(): AST.Stmt[] {
@@ -271,7 +311,7 @@ export class Parser {
       const slotName = this.advance();
       let arrayIdx: AST.Expr | null = null;
       if (this.match(TokenType.LeftSquareBracket)) {
-        arrayIdx = this.expression();
+        arrayIdx = this.parseArrayIndex();
         this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
       }
       this.consume(TokenType.Assign, "Expected '=' after slot name");
@@ -309,7 +349,7 @@ export class Parser {
       const label = this.consume(TokenType.Label, 'Expected label after .');
       let arrAccess: AST.Expr | null = null;
       if (this.match(TokenType.LeftSquareBracket)) {
-        arrAccess = this.expression();
+        arrAccess = this.parseArrayIndex();
         this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
       }
       if (this.match(TokenType.Assign)) {
@@ -349,7 +389,7 @@ export class Parser {
     // Check for variable assignment
     if (expr instanceof AST.VarExpr) {
       if (this.match(TokenType.LeftSquareBracket)) {
-        const arrExpr = this.expression();
+        const arrExpr = this.parseArrayIndex();
         this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
         expr.arrayIndex = arrExpr;
       }
@@ -606,7 +646,7 @@ export class Parser {
       const label = this.consume(TokenType.Label, 'Expected label after .');
       let arrAccess: AST.Expr | null = null;
       if (this.match(TokenType.LeftSquareBracket)) {
-        arrAccess = this.expression();
+        arrAccess = this.parseArrayIndex();
         this.consume(TokenType.RightSquareBracket, "Expected ']'");
       }
       expr = new AST.SlotAccessExpr(expr, arrAccess, label);
@@ -642,7 +682,7 @@ export class Parser {
     // Handle direct array access: expr[expr]
     while (this.check(TokenType.LeftSquareBracket)) {
       this.advance();
-      const index = this.expression();
+      const index = this.parseArrayIndex();
       this.consume(TokenType.RightSquareBracket, "Expected ']' after array index");
       if (expr instanceof AST.VarExpr && expr.arrayIndex === null) {
         expr.arrayIndex = index;
@@ -657,7 +697,7 @@ export class Parser {
       const label = this.consume(TokenType.Label, 'Expected label after .');
       let arrAccess: AST.Expr | null = null;
       if (this.match(TokenType.LeftSquareBracket)) {
-        arrAccess = this.expression();
+        arrAccess = this.parseArrayIndex();
         this.consume(TokenType.RightSquareBracket, "Expected ']'");
       }
       expr = new AST.SlotAccessExpr(expr, arrAccess, label);
@@ -717,8 +757,7 @@ export class Parser {
     }
     if (this.match(TokenType.Dollar) || this.match(TokenType.Modulus)) {
       const isGlobal = this.previous().type === TokenType.Dollar;
-      const name = this.consume(TokenType.Label, 'Expected variable name');
-      return new AST.VarExpr(name, null, null, isGlobal ? VarType.Global : VarType.Local);
+      return this.parseVariableNameToken(isGlobal);
     }
     return null;
   }

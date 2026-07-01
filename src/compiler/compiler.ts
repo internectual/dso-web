@@ -656,16 +656,18 @@ export class Compiler {
     const start = c.ip;
     this.emit(c, this.getOpcodeValue(OpCode.PushFrame));
     // Class name: emit LoadImmedIdent + ident table entry
-    const classStrIdx = this.currentStringTable.add(e.className.name.literal, false, false);
+    const classNameExpr = e.className as AST.ConstantExpr;
+    const classStrIdx = this.currentStringTable.add(classNameExpr.name.literal, false, false);
     this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
     const classIp = this.context_ip(c);
-    this.identTable.add(this.currentStringTable, e.className.name.literal, classIp);
+    this.identTable.add(this.currentStringTable, classNameExpr.name.literal, classIp);
     this.emit(c, this.getOpcodeValue(OpCode.Push));
     // Object name: emit LoadImmedIdent + ident table entry
     if (e.objectNameExpr instanceof AST.ConstantExpr) {
       this.emit(c, this.getOpcodeValue(OpCode.LoadImmedIdent));
       const objIp = this.context_ip(c);
-      this.identTable.add(this.currentStringTable, e.objectNameExpr.name.literal, objIp);
+      const objNameExpr = e.objectNameExpr as AST.ConstantExpr;
+      this.identTable.add(this.currentStringTable, objNameExpr.name.literal, objIp);
     } else {
       this.compileExpr(c, e.objectNameExpr, TypeReq.String);
     }

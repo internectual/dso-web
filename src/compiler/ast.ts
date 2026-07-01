@@ -185,9 +185,9 @@ export class AssignExpr extends Expr {
 
 export class AssignOpExpr extends Expr {
   varExpr: VarExpr;
-  expr: Expr;
+  expr: Expr | null;
   op: Token;
-  constructor(varExpr: VarExpr, expr: Expr, op: Token) {
+  constructor(varExpr: VarExpr, expr: Expr | null, op: Token) {
     super(varExpr.lineNo); this.varExpr = varExpr; this.expr = expr; this.op = op;
   }
 }
@@ -206,8 +206,8 @@ export class FuncCallExpr extends Expr {
 export class SlotAccessExpr extends Expr {
   objectExpr: Expr;
   arrayExpr: Expr | null;
-  slotName: Token;
-  constructor(objectExpr: Expr, arrayExpr: Expr | null, slotName: Token) {
+  slotName: Token | null;
+  constructor(objectExpr: Expr, arrayExpr: Expr | null, slotName: Token | null) {
     super(objectExpr.lineNo); this.objectExpr = objectExpr; this.arrayExpr = arrayExpr; this.slotName = slotName;
   }
 }
@@ -226,10 +226,10 @@ export class SlotAssignExpr extends Expr {
 export class SlotAssignOpExpr extends Expr {
   objectExpr: Expr;
   arrayExpr: Expr | null;
-  slotName: Token;
-  expr: Expr;
+  slotName: Token | null;
+  expr: Expr | null;
   op: Token;
-  constructor(objectExpr: Expr, arrayExpr: Expr | null, slotName: Token, expr: Expr, op: Token) {
+  constructor(objectExpr: Expr, arrayExpr: Expr | null, slotName: Token | null, expr: Expr | null, op: Token) {
     super(objectExpr.lineNo); this.objectExpr = objectExpr; this.arrayExpr = arrayExpr;
     this.slotName = slotName; this.expr = expr; this.op = op;
   }

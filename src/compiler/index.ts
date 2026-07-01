@@ -1,6 +1,7 @@
 // index.ts — Compiler module exports
 
-export { Scanner, TokenType, Token } from './scanner';
+export { Scanner, TokenType } from './scanner';
+export type { Token } from './scanner';
 export { Parser, SyntaxError } from './parser';
 export * from './ast';
 export { Compiler, OpCode } from './compiler';

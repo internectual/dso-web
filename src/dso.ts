@@ -65,9 +65,21 @@ export async function processUpload(file: File): Promise<DsoFileResult[]> {
   const buf = new Uint8Array(await file.arrayBuffer());
   const lower = file.name.toLowerCase();
 
-  // Single .dso file
-  if (lower.endsWith(".dso")) {
-    return [identifyDso(file.name, buf)];
+  const isArchive = lower.endsWith(".zip") || lower.endsWith(".vl2") || lower.endsWith(".pk3") ||
+    (buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04);
+
+  if (!isArchive) {
+    if (lower.endsWith(".dso")) {
+      return [identifyDso(file.name, buf)];
+    } else {
+      return [{
+        name: file.name,
+        size: file.size,
+        version: null,
+        candidates: [],
+        bytes: buf,
+      }];
+    }
   }
 
   // Anything else: assume zip archive and surface every entry in a tree.

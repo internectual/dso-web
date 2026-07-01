@@ -1,4 +1,4 @@
-// main.ts — UI entry point for DSO Decompiler
+// main.ts — UI entry point for TURD
 
 import {
   decompile as decompileDso,
@@ -16,6 +16,7 @@ import {
   effectiveFileKind,
   detectFileKind,
 } from "./dso";
+import { Compiler } from "./compiler";
 
 // ─── State ───
 let lastOutput = "";
@@ -32,6 +33,12 @@ const panelBody = document.getElementById("panel-body")!;
 const statusEl = document.getElementById("status")!;
 const downloadBtn = document.getElementById("download-btn") as HTMLButtonElement;
 const copyBtn = document.getElementById("copy-btn") as HTMLButtonElement;
+const compileBtn = document.getElementById("compile-btn") as HTMLButtonElement;
+const compileTargetSelect = document.getElementById("compile-target-select") as HTMLSelectElement;
+const compileDialog = document.getElementById("compile-dialog") as HTMLDialogElement;
+const compileFilenameInput = document.getElementById("compile-filename-input") as HTMLInputElement;
+const compileCancelBtn = document.getElementById("compile-cancel-btn") as HTMLButtonElement;
+const compileSaveBtn = document.getElementById("compile-save-btn") as HTMLButtonElement;
 const tabsEl = document.getElementById("tabs")!;
 const fileListEl = document.getElementById("file-list")!;
 const layoutEl = document.getElementById("layout")!;
@@ -84,6 +91,13 @@ async function handleFile(file: File) {
     selectedIndex = 0;
     layoutEl.classList.add("active");
     controlsEl.style.display = "flex";
+    if (results.length <= 1) {
+      sidebarEl.style.display = "none";
+      resizeHandle.style.display = "none";
+    } else {
+      sidebarEl.style.display = "";
+      resizeHandle.style.display = "";
+    }
     renderFileList();
     renderResult(results[0]);
   } catch (e: any) {
@@ -158,6 +172,16 @@ function renderFileList() {
 
 // ─── Render result ───
 function renderResult(result: DsoFileResult) {
+  const lowerName = result.name.toLowerCase();
+  const isCompileSupported = lowerName.endsWith(".cs") || lowerName.endsWith(".gui") || lowerName.endsWith(".mis");
+  if (isCompileSupported) {
+    compileBtn.style.display = "";
+    compileTargetSelect.style.display = "";
+  } else {
+    compileBtn.style.display = "none";
+    compileTargetSelect.style.display = "none";
+  }
+
   const kind = effectiveFileKind(result.name, result.bytes);
 
   // Render version card (hide for non-DSO files)
@@ -550,5 +574,69 @@ copyBtn.addEventListener("click", () => {
 engineSelect.addEventListener("change", () => {
   if (currentResults.length > 0) {
     renderResult(currentResults[selectedIndex]);
+  }
+});
+
+// ─── Download Bytes ───
+function downloadBytes(bytes: Uint8Array, filename: string) {
+  const blob = new Blob([bytes], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ─── Compile Handler ───
+let compiledDataToSave: Uint8Array | null = null;
+
+compileBtn.addEventListener("click", () => {
+  const result = currentResults[selectedIndex];
+  if (!result) return;
+  const lowerName = result.name.toLowerCase();
+  if (!(lowerName.endsWith(".cs") || lowerName.endsWith(".gui") || lowerName.endsWith(".mis"))) return;
+
+  try {
+    const code = bytesToText(result.bytes);
+    const target = compileTargetSelect.value;
+    const compiler = new Compiler(target);
+    compiledDataToSave = compiler.compile(code);
+
+    // Set default name in dialog input: original filename + ".dso"
+    compileFilenameInput.value = result.name + ".dso";
+    compileDialog.showModal();
+  } catch (err: any) {
+    panelBody.innerHTML = `
+      <div class="code-output">
+        <div class="line-nums"></div>
+        <div class="code-content error">Compilation failed for target ${compileTargetSelect.value}:\n\n${escapeHtml(err.message || String(err))}</div>
+      </div>
+    `;
+    statusEl.textContent = "Compilation failed";
+  }
+});
+
+compileCancelBtn.addEventListener("click", () => {
+  compileDialog.close();
+  compiledDataToSave = null;
+});
+
+compileSaveBtn.addEventListener("click", () => {
+  if (compiledDataToSave) {
+    const outName = compileFilenameInput.value.trim() || "compiled.dso";
+    downloadBytes(compiledDataToSave, outName);
+    statusEl.textContent = `Successfully compiled and saved to ${outName} (${compiledDataToSave.length} bytes)`;
+  }
+  compileDialog.close();
+  compiledDataToSave = null;
+});
+
+compileFilenameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    compileSaveBtn.click();
   }
 });
